@@ -1,7 +1,17 @@
-// 제어문자와 눈에 보이지 않는 서식 문자들. 닉네임에 들어가면 표시가 깨지거나
-// 텍스트 방향을 뒤집는 장난(bidi override)이 가능하다.
+// 닉네임에서 걸러낼 문자들.
+//   \p{Cc}          제어문자
+//   U+200B          zero-width space
+//   U+200E, U+200F  LRM / RLM
+//   U+202A-U+202E   bidi embedding / override (표시 방향을 뒤집는 장난)
+//   U+2066-U+2069   bidi isolate
+//   U+FEFF          BOM
+//   U+2028, U+2029  line / paragraph separator
 // ZWJ(U+200D)와 variation selector는 이모지 조합에 필요하므로 일부러 남겨둔다.
 const INVISIBLE = /[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u2028\u2029]/gu;
+
+// 탭/개행도 제어문자(\p{Cc})에 속한다. INVISIBLE로 그냥 지워버리면 "a<TAB>b"가
+// "ab"로 붙어 단어 경계가 사라지므로, 지우기 전에 공백으로 바꿔둔다.
+const WHITESPACE_CONTROL = /[\t\n\v\f\r]/g;
 const WHITESPACE_RUN = /\s+/g;
 
 // 코드 유닛이 아니라 grapheme 단위로 잘라야 이모지/한글 조합이 깨지지 않는다.
@@ -25,7 +35,7 @@ function truncateGraphemes(text, maxLength) {
  *
  * 기존 코드는 `arg.substring(0, 9)` 한 줄이 전부여서
  *   - 문자열이 아닌 값(숫자/null/객체)이 오면 TypeError가 나고, 그 예외가
- *     rate limit용 catch에 삼켜져 사용자에게 "너무 잦은 요청"이라고 거짓
+ *     rate limit용 catch에 삼켜져 사용자에게 "너무 잦은 요청"이라는 거짓
  *     안내가 나갔다.
  *   - 이모지가 코드 유닛 경계에서 잘렸다.
  *   - 빈 문자열/공백만 있는 닉네임이 그대로 통과했다.
@@ -38,7 +48,12 @@ function truncateGraphemes(text, maxLength) {
 export function normalizeNickname(raw, { maxLength, fallback }) {
   if (typeof raw !== "string") return fallback;
 
-  const cleaned = raw.normalize("NFC").replace(INVISIBLE, "").replace(WHITESPACE_RUN, " ").trim();
+  const cleaned = raw
+    .normalize("NFC")
+    .replace(WHITESPACE_CONTROL, " ")
+    .replace(INVISIBLE, "")
+    .replace(WHITESPACE_RUN, " ")
+    .trim();
 
   if (cleaned === "") return fallback;
 

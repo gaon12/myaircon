@@ -33,11 +33,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test test/",
+    "test": "node --test \"test/**/*.test.js\"",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check --write .",
-    "ci": "biome ci . && node --test test/"
+    "ci": "biome ci . && node --test \"test/**/*.test.js\"",
+    "test:watch": "node --test --watch \"test/**/*.test.js\""
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
