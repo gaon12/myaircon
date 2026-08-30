@@ -75,10 +75,7 @@ describe("HTTP 서버", () => {
       assert.doesNotMatch(csp, /https?:\/\//, "외부 출처를 허용하면 안 된다");
     });
 
-    // 인라인 <script>/<style>을 외부 파일로 분리하는 UI 커밋에서 통과하게 된다.
-    it("'unsafe-inline'이 없다", {
-      todo: "마크업에서 인라인 스크립트/스타일 제거 후 활성화",
-    }, async () => {
+    it("'unsafe-inline'이 없다", async () => {
       const csp = (await app.inject({ method: "GET", url: "/" })).headers[
         "content-security-policy"
       ];
@@ -91,8 +88,7 @@ describe("HTTP 서버", () => {
     });
   });
 
-  // CDN을 걷어내고 클라이언트 번들을 직접 서빙하는 커밋에서 통과하게 된다.
-  it("HTML에 CDN 스크립트가 남아 있지 않다", { todo: "CDN 제거 커밋에서 활성화" }, async () => {
+  it("HTML에 CDN 스크립트가 남아 있지 않다", async () => {
     // CSP가 외부 출처를 막고 있으므로 CDN 태그가 남으면 페이지가 조용히 깨진다.
     const html = await readFile(path.join(baseConfig.publicDir, "index.html"), "utf8");
     const externalSrc = [...html.matchAll(/(?:src|href)\s*=\s*["'](https?:)?\/\/[^"']+/gi)];
@@ -146,5 +142,55 @@ describe("저장된 상태 복원", () => {
     assert.equal(context.thermostat.value, 30);
     await closeApp(context);
     await rm(dir, { recursive: true, force: true });
+  });
+});
+
+describe("socket.io 클라이언트 자체 서빙 (CDN 제거)", () => {
+  let context;
+
+  before(async () => {
+    context = await buildApp({
+      config: { ...baseConfig, persistenceEnabled: false },
+      logger: false,
+    });
+    await context.app.ready();
+  });
+
+  after(async () => {
+    await closeApp(context);
+  });
+
+  it("/vendor/socket.io/ 에서 ESM 번들을 내려준다", async () => {
+    const res = await context.app.inject({
+      method: "GET",
+      url: "/vendor/socket.io/socket.io.esm.min.js",
+    });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.headers["content-type"], /javascript/);
+    assert.ok(res.body.length > 10_000, "번들이 비어 있으면 안 된다");
+    assert.match(res.body, /as io\b/, "io export가 있어야 한다");
+  });
+
+  it("클라이언트가 그 경로를 그대로 import 한다", async () => {
+    const source = await readFile(path.join(baseConfig.publicDir, "js", "socket.js"), "utf8");
+    const specifier = /from\s+["'](?<path>[^"']+socket\.io[^"']*)["']/.exec(source)?.groups?.path;
+    assert.ok(specifier, "socket.io import를 찾지 못했다");
+
+    // 실제로 서버가 그 경로를 서빙하는지 확인한다. 오타가 나면 CSP에 막혀
+    // 조용히 죽기 때문에 경로를 문자열로만 두면 안 된다.
+    const res = await context.app.inject({ method: "GET", url: specifier });
+    assert.equal(res.statusCode, 200, `${specifier} 를 서빙하지 못한다`);
+  });
+
+  it("서버와 클라이언트가 같은 socket.io 메이저 버전을 쓴다", async () => {
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const server = require("socket.io/package.json").version;
+    const client = require("socket.io-client/package.json").version;
+    assert.equal(
+      server.split(".")[0],
+      client.split(".")[0],
+      "CDN을 쓰던 시절에는 서버만 캐럿 범위로 떠내려가 버전이 어긋날 수 있었다",
+    );
   });
 });

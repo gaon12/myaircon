@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import path from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { Server as SocketIOServer } from "socket.io";
@@ -12,6 +14,14 @@ import { Thermostat } from "./thermostat.js";
  * listen을 분리해 둬야 테스트에서 포트 0으로 임의 포트에 띄울 수 있고,
  * 기존 코드처럼 라우트 등록보다 먼저 listen이 호출되는 사고도 막을 수 있다.
  */
+// socket.io 클라이언트 번들의 실제 위치. package.json은 exports 맵에 공개돼
+// 있으므로 그 경로에서 dist/를 찾으면 npm/pnpm의 호이스팅 방식과 무관하게
+// 안정적으로 해석된다.
+const socketIoClientDist = path.join(
+  path.dirname(createRequire(import.meta.url).resolve("socket.io-client/package.json")),
+  "dist",
+);
+
 export async function buildApp({ config = defaultConfig, logger } = {}) {
   const app = Fastify({
     logger: logger ?? { level: config.logLevel },
@@ -58,6 +68,19 @@ export async function buildApp({ config = defaultConfig, logger } = {}) {
   await app.register(fastifyStatic, {
     root: config.publicDir,
     index: false,
+  });
+
+  // socket.io 클라이언트를 CDN이 아니라 우리 서버에서 직접 내려준다.
+  // 서버가 쓰는 socket.io와 같은 의존성 트리에서 나오므로 버전이 어긋날 수
+  // 없고, CSP에서 외부 출처를 전부 막을 수 있게 된다.
+  await app.register(fastifyStatic, {
+    root: socketIoClientDist,
+    prefix: "/vendor/socket.io/",
+    index: false,
+    // 두 번째 등록부터는 reply.sendFile 데코레이터를 다시 붙이지 않는다.
+    decorateReply: false,
+    // 번들은 버전마다 내용이 고정이라 길게 캐시해도 안전하다.
+    maxAge: "1h",
   });
 
   app.get("/", (_req, reply) => reply.sendFile("index.html"));

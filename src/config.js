@@ -85,11 +85,11 @@ export const config = {
         "frame-ancestors 'none'",
         "form-action 'self'",
         "img-src 'self' data:",
-        // TODO(csp): public/index.html이 아직 인라인 <script>/<style>을 쓰고 있어
-        // 'unsafe-inline'이 없으면 페이지가 통째로 죽는다. 마크업과 스크립트를
-        // 외부 파일로 분리하는 커밋에서 이 두 줄의 'unsafe-inline'을 제거한다.
-        "script-src 'self' 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline'",
+        // 인라인 <script>/<style>이 없고 CDN도 쓰지 않으므로 'unsafe-inline'과
+        // 외부 출처를 모두 뺄 수 있다. socket.io 클라이언트 번들도 우리
+        // 서버(/vendor/socket.io/)에서 나온다.
+        "script-src 'self'",
+        "style-src 'self'",
         "worker-src 'self'",
         "connect-src 'self'",
       ].join("; "),

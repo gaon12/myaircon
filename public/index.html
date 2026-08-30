@@ -1,356 +1,139 @@
 <!DOCTYPE html>
-<html>
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Aircon</title>
-</head>
-
-<body style="margin: 0;" >
-
-  <style>
-    .modal {
-      background: white;
-      position: absolute;
-      width: 100%;
-      height: 100px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 4;
-    }
-
-    .modal input {
-      padding: 5px;
-    }
-
-    button {
-      padding: 5px;
-      background: #272727;
-      color: white;
-      border-radius: 5px;
-    }
-
-    button:active {
-      background: #6b6b6b;
-    }
-
-    .aircon-box {
-      position: relative;
-      display: flex;
-      justify-content: center;
-    }
-
-    .aircon {
-      width: 350px;
-    }
-
-    .air {
-      position: absolute;
-    }
-
-    .aircon-fan {
-      position: absolute;
-      transform: translateY(102px) scaleY(1);
-    }
-
-    .air {
-      visibility: hidden;
-    }
-
-    .air-animate {
-      visibility: visible;
-      clip-path: inset(0 0 0 0);
-      animation: reveal 2s forwards;
-      animation-iteration-count: infinite;
-    }
-
-    @keyframes reveal {
-      0% {
-        clip-path: inset(0 0 100% 0);
-        opacity: 0.9;
-      }
-
-      50% {
-        opacity: 0.7;
-      }
-
-      100% {
-        clip-path: inset(0 0 0 0);
-        opacity: 0;
-      }
-    }
-
-    .flip {
-      transition: transform 1s;
-      transform: translateY(114px) scaleY(-1);
-    }
-
-    .temp-box {
-      position: absolute;
-      top: 50px;
-      opacity: 1;
-      transition: all 1s;
-    }
-
-    .who {
-      position: absolute;
-      font-size: 11px;
-      top : 20px;
-    }
-
-    .who p {
-      transition: opacity 1s;
-      opacity: 1;
-    }
-    .who-alert p{
-      transition: opacity 0.5s;
-      opacity: 1;
-    }
-
-    .who-alert {
-      position: absolute;
-      font-size: 11px;
-      top : 0px;
-    }
-    .who .who-fade, .who-alert .who-fade{
-      opacity: 0;
-    }
-
-    .rainbow {
-      background: linear-gradient(45deg, #ffc1c1, #fbdbab, #ffffcc, #bafbba, #bbe8ff, #dcbefd, #ffb7ff);
-      color: black;
-      transition: all 1s;
-    }
-
-  </style>
-
-
-  <div class="aircon-box">
-    <div class="temp-box">
-      <h4 class="temp"></h4>
-    </div>
-    <div class="who-alert"><p></p></div>
-    <div class="who"><p></p></div>
-    <img src="/aircon0.png" class="aircon">
-    <img src="/aircon-fan2.png" class="aircon aircon-fan">
-    <img src="/air2.png" class="aircon air">
-  </div>
-
-
-  <div class="modal">
-    <div class="modal-inner">
-      <input placeholder="nickname" maxlength="9">
-      <button class="ok">OK</button>
-    </div>
-  </div>
-
-  <div class="aircon-box">
-
-    <button class="plus">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4" /></svg>
-    </button>
-    <button class="minus">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-dash" viewBox="0 0 16 16"><path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8" /></svg></button>
-    <button class="brown-noise2"></button>
-
-  </div>
-  <div class="aircon-box" style="margin-top: 20px;">
-    <button class="real-time">Online mode is off</button>
-  </div>
-
-  
-  
-  <!-- stats and about -->
-  <dialog style="font-size: 11px;">
-    <p>+ button pressed count : <span class="plusCount">0</span></p>
-    <p>- button pressed count : <span class="minusCount">0</span></p>
-    <button class="close-dialog1" autofocus>Close</button>
-  </dialog>
-  <span class="show-dialog1" style="position: fixed; bottom: 10px; right: 45px; font-size: 9px;">Stats</span>
-
-
-  <dialog style="font-size: 11px;">
-    <p>- Brown noise generator to focus and relax</p>
-    <p>- turn on online mode to share the aircon with everyone (saves electricity)</p>
-    <p>- Youtube @codingapple</p>
-    <button class="close-dialog2" autofocus>Close</button>
-  </dialog>
-  <span class="show-dialog2" style="position: fixed; bottom: 10px; right: 10px; font-size: 9px;">About</span>
-
-
-
-  <script>
-    const dialog = document.querySelectorAll("dialog");
-    const showButton1 = document.querySelector(".show-dialog1");
-    const showButton2 = document.querySelector(".show-dialog2");
-    const closeButton1 = document.querySelector(".close-dialog1");
-    const closeButton2 = document.querySelector(".close-dialog2");
-
-    //stats modal
-    showButton1.addEventListener("click", () => {
-      var plus = localStorage.getItem('+')
-      var minus = localStorage.getItem('-')
-      document.querySelector('.plusCount').innerHTML = plus || '0'
-      document.querySelector('.minusCount').innerHTML = minus || '0'
-      dialog[0].showModal();
-    });
-
-    closeButton1.addEventListener("click", () => {
-      dialog[0].close();
-    });
-
-    //about modal
-    showButton2.addEventListener("click", () => {
-      dialog[1].showModal();
-    });
-
-    closeButton2.addEventListener("click", () => {
-      dialog[1].close();
-    });
-  </script>
-
-
-
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"
-    integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"
-    crossorigin="anonymous"></script>
-
-    
-  <script src="/brown-run.js"></script>
-
-  <script>
-
-    const tempElement = document.querySelector('.temp')
-    const whoElement = document.querySelector('.who')
-    const whoAlertElement = document.querySelector('.who-alert')
-    let currentTemp = 30;
-    let isOnline = false;
-    let isSoundOn = false;
-    let socket;
-    let username = ''
-
-    document.querySelector('.ok').addEventListener('click', () => {
-      //save name
-      username = document.querySelector('input').value
-      document.querySelector('.modal').style.display = 'none'
-
-      turnOn()
-    })
-
-
-
-    function turnOn() {
-       
-      //brown noise ON
-      document.querySelector('.brown-noise2').click()
-      isSoundOn = true;
-
-      //animation
-      document.querySelector('.aircon-fan').classList.add('flip')
-      document.querySelector('.air').classList.add('air-animate')
-
-      //+- buttons
-      document.querySelector('.plus').addEventListener('click', () => {
-        localStorage.setItem('+', (Number(localStorage.getItem('+')) || 0) + 1) 
-        if (isOnline == true){
-          socket.emit("plus", username)
-        } else {
-          if (currentTemp < 30) {
-            currentTemp++;
-            tempElement.innerHTML = currentTemp + '℃';
-          }
-        }
-      })
-      document.querySelector('.minus').addEventListener('click', () => {
-        localStorage.setItem('-', (Number(localStorage.getItem('-')) || 0) + 1) 
-        if (isOnline == true){
-          socket.emit("minus", username)
-        } else {
-          if (currentTemp > 18) {
-            currentTemp--;
-            tempElement.innerHTML = currentTemp + '℃';
-          }
-        }
-      })
-
-    }
-
-
-
-    //real time mode on/off button
-    document.querySelector('.real-time').addEventListener('click', ()=> {
-
-      if (!socket){
-        socket = io({transports: ["websocket"]});
-        socket.on("connect", () => {
-          socket.on("init", (data) => {
-            document.querySelector('.temp').innerHTML = data + '℃'
-            currentTemp = data;
-          });
-
-        })
-      }
-      
-
-      //if currently not online
-      if (isOnline == false){
-        isOnline = true
-        document.querySelector('.real-time').classList.add('rainbow');
-
-
-        //starts listening to server
-        socket.on("blocked", (data) => {
-          whoAlertElement.innerHTML = '<p>같은 IP의 과도한 요청으로 미반영</p>';
-        });
-        socket.on("tempChange", (data) => {
-          //{temp : temp, username : arg}
-          tempElement.innerHTML = data.temp + '℃';
-          whoElement.innerHTML = '<p></p>'
-          whoElement.children[0].innerText = '조절한 사람: ' + data.username;
-          currentTemp = data.temp;
-
-          if (isSoundOn == true){
-            realTimeGain() //brown-run.js
-          }
-        })
-        document.querySelector('.real-time').innerHTML = "Online mode is on"
-
-
-      //if currently online
-      } else {
-        isOnline = false
-        document.querySelector('.real-time').classList.remove('rainbow')
-
-        //stop listening to server
-        socket.off('blocked')
-        socket.off('tempChange')
-        socket.off('connect')
-        socket.off('init')
-        document.querySelector('.real-time').innerHTML = "Online mode is off"
-      }
-    })
-
-
-
-    //who name auto fade
-    setInterval(()=>{
-      var whoElement2 = document.querySelector('.who p');
-      if (whoElement2){
-        whoElement2.classList.add('who-fade')
-      }
-
-      var whoElement3 = document.querySelector('.who-alert p');
-      if (whoElement3){
-        whoElement3.classList.add('who-fade')
-      }
-      
-    }, 1000)
-
-
-  </script>
-
-</body>
-
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Aircon</title>
+    <meta name="description" content="모두가 함께 쓰는 온라인 에어컨과 브라운 노이즈 생성기" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+
+  <body>
+    <h1 class="visually-hidden" data-i18n="title">온라인 에어컨</h1>
+
+    <main>
+      <div class="aircon-box">
+        <p class="notice" data-notice role="status" aria-live="polite"></p>
+        <p class="who" data-who role="status" aria-live="polite"></p>
+        <p class="temp" data-temp role="status" aria-live="polite" aria-atomic="true"></p>
+
+        <img src="/aircon0.png" alt="" class="aircon" width="350" />
+        <img src="/aircon-fan2.png" alt="" class="aircon aircon-fan" data-fan width="350" />
+        <img src="/air2.png" alt="" class="aircon air" data-air width="350" />
+      </div>
+
+      <div class="controls">
+        <button type="button" class="icon-button" data-plus data-i18n-label="warmer" disabled>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"
+            />
+          </svg>
+        </button>
+
+        <button type="button" class="icon-button" data-minus data-i18n-label="cooler" disabled>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="icon-button is-muted"
+          data-sound
+          aria-pressed="false"
+          disabled
+        >
+          <svg
+            class="icon-sound-on"
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M11.536 14.01A8.47 8.47 0 0 0 14.026 8a8.47 8.47 0 0 0-2.49-6.01l-.708.707A7.48 7.48 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303z"
+            />
+            <path
+              d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.48 5.48 0 0 1 11.025 8a5.48 5.48 0 0 1-1.61 3.89z"
+            />
+            <path
+              d="M8.707 11.182A4.5 4.5 0 0 0 10.025 8a4.5 4.5 0 0 0-1.318-3.182L8 5.525A3.5 3.5 0 0 1 9.025 8 3.5 3.5 0 0 1 8 10.475zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06"
+            />
+          </svg>
+          <svg
+            class="icon-sound-off"
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06m7.137 2.096a.5.5 0 0 1 0 .708L12.207 8l1.647 1.646a.5.5 0 0 1-.708.708L11.5 8.707l-1.646 1.647a.5.5 0 0 1-.708-.708L10.793 8 9.146 6.354a.5.5 0 1 1 .708-.708L11.5 7.293l1.646-1.647a.5.5 0 0 1 .708 0"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div class="controls">
+        <button type="button" class="pill" data-online aria-pressed="false" disabled>온라인 모드 꺼짐</button>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <button type="button" class="link" data-show-stats data-i18n="stats">통계</button>
+      <button type="button" class="link" data-show-about data-i18n="about">정보</button>
+    </footer>
+
+    <dialog class="dialog" data-nickname-dialog>
+      <form method="dialog" data-nickname-form>
+        <label class="field-label" for="nickname" data-i18n="nicknameLabel">닉네임</label>
+        <input
+          id="nickname"
+          data-nickname-input
+          type="text"
+          maxlength="9"
+          autocomplete="off"
+          enterkeyhint="go"
+        />
+        <button type="submit" class="pill" data-i18n="start">시작</button>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" data-stats-dialog>
+      <p><span data-i18n="plusCount">＋ 누른 횟수</span>: <span data-plus-count>0</span></p>
+      <p><span data-i18n="minusCount">－ 누른 횟수</span>: <span data-minus-count>0</span></p>
+      <button type="button" class="pill" data-close-dialog data-i18n="close" autofocus>닫기</button>
+    </dialog>
+
+    <dialog class="dialog" data-about-dialog>
+      <div data-about-lines></div>
+      <button type="button" class="pill" data-close-dialog data-i18n="close" autofocus>닫기</button>
+    </dialog>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
 </html>

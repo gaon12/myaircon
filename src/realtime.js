@@ -26,11 +26,14 @@ export function registerRealtime(io, { thermostat, config, logger, onChange }) {
       trustProxyHops: config.trustProxyHops,
     });
 
-    // 접속 즉시 현재 상태를 보낸다.
-    // NOTE: 지금은 기존 클라이언트와 호환되도록 숫자 하나를 그대로 보낸다.
-    // 온도 범위(min/max)까지 함께 내려보내는 프로토콜 변경은 클라이언트를
-    // 새로 쓰는 커밋에서 양쪽을 동시에 바꾼다.
-    socket.emit("init", thermostat.value);
+    // 접속 즉시 현재 상태를 보낸다. 온도 범위까지 함께 내려보내서 클라이언트가
+    // 18/30을 하드코딩하지 않아도 되게 한다. 기존에는 같은 클램프 로직이
+    // 서버와 클라이언트에 각각 적혀 있어 한쪽만 바꾸면 조용히 어긋났다.
+    socket.emit("init", {
+      temp: thermostat.value,
+      min: thermostat.min,
+      max: thermostat.max,
+    });
 
     socket.on("plus", (payload) => void handleStep("up", payload));
     socket.on("minus", (payload) => void handleStep("down", payload));
@@ -55,9 +58,12 @@ export function registerRealtime(io, { thermostat, config, logger, onChange }) {
         await limiter.consume(clientIp);
       } catch (err) {
         if (err instanceof RateLimiterRes) {
-          // NOTE: 재시도까지 남은 시간(err.msBeforeNext)을 함께 보내는
-          // 구조화된 페이로드로의 변경은 클라이언트 커밋에서 함께 처리한다.
-          socket.emit("blocked", "너무 잦은 요청");
+          // 언제 다시 시도할 수 있는지 알려줘야 클라이언트가 "잠시 후 다시"
+          // 대신 남은 시간을 보여줄 수 있다.
+          socket.emit("blocked", {
+            reason: "rate_limited",
+            retryAfterMs: err.msBeforeNext,
+          });
         } else {
           logger.error({ err, clientIp }, "rate limiter 동작 실패");
           socket.emit("server-error", { reason: "internal" });

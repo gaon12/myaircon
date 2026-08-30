@@ -10,10 +10,17 @@ describe("실시간 온도 조절", () => {
     server = undefined;
   });
 
-  it("접속하면 현재 온도를 받는다", async () => {
+  it("접속하면 현재 온도와 함께 허용 범위를 받는다", async () => {
+    // 클라이언트가 18/30을 하드코딩하지 않도록 서버가 범위를 알려준다.
     server = await startTestServer({ temperature: { min: 18, max: 30, initial: 22 } });
     const { init } = await server.connect();
-    assert.equal(init, 22);
+    assert.deepEqual(init, { temp: 22, min: 18, max: 30 });
+  });
+
+  it("범위를 바꾸면 init에 그대로 반영된다", async () => {
+    server = await startTestServer({ temperature: { min: 10, max: 12, initial: 11 } });
+    const { init } = await server.connect();
+    assert.deepEqual(init, { temp: 11, min: 10, max: 12 });
   });
 
   it("plus/minus가 온도를 움직이고 전원에게 브로드캐스트된다", async () => {
@@ -112,8 +119,13 @@ describe("실시간 온도 조절", () => {
       assert.equal(server.thermostat.value, 20);
 
       socket.emit("plus", "flood");
-      const [event] = await race(socket, ["blocked", "tempChange"]);
+      const [event, payload] = await race(socket, ["blocked", "tempChange"]);
       assert.equal(event, "blocked");
+      assert.equal(payload.reason, "rate_limited");
+      // 언제 다시 시도할 수 있는지 알려줘야 "잠시 후 다시" 대신 남은 시간을
+      // 보여줄 수 있다. 예전 페이로드는 문자열 하나뿐이었다.
+      assert.equal(typeof payload.retryAfterMs, "number");
+      assert.ok(payload.retryAfterMs > 0);
       assert.equal(server.thermostat.value, 20, "차단된 요청은 온도를 바꾸면 안 된다");
     });
 
@@ -170,6 +182,6 @@ describe("실시간 온도 조절", () => {
     await once(a.socket, "tempChange");
 
     const b = await server.connect();
-    assert.equal(b.init, 19);
+    assert.equal(b.init.temp, 19);
   });
 });

@@ -1,0 +1,276 @@
+/*
+ * 기존에는 스타일이 네 군데에 흩어져 있었다.
+ *   1. <body style="margin: 0">
+ *   2. <body> 안의 <style> 블록
+ *   3. <span style="position: fixed; ..."> 인라인 스타일
+ *   4. SVG 속성
+ * 게다가 .air 셀렉터가 7줄 간격으로 두 번 정의돼 있었다.
+ * 여기 한 파일로 모으고, 손으로 맞춰 놓았던 매직 넘버는 커스텀 프로퍼티로 뺐다.
+ */
+
+:root {
+  --aircon-width: 350px;
+
+  /* 팬 이미지를 에어컨 본체에 맞추는 오프셋. 기존에는 102px과 114px이라는
+     두 매직 넘버가 12px 차이로 따로 적혀 있어서, PNG를 바꾸면 둘 다 손으로
+     다시 맞춰야 했다. 기준값 하나와 그 차이로 표현한다. */
+  --fan-offset: 102px;
+  --fan-flip-offset: calc(var(--fan-offset) + 12px);
+
+  --ink: #272727;
+  --ink-soft: #6b6b6b;
+  --surface: #ffffff;
+  --radius: 6px;
+  --focus: #2f6fed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+}
+
+/* 화면에서는 숨기지만 스크린 리더에는 읽히는 텍스트.
+   문서에 h1이 없어 아웃라인이 <h4>부터 시작하던 문제를 해결한다. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------ 에어컨 */
+
+.aircon-box {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.aircon {
+  width: var(--aircon-width);
+  max-width: 100%;
+  height: auto;
+}
+
+.aircon-fan,
+.air {
+  position: absolute;
+}
+
+.aircon-fan {
+  transform: translateY(var(--fan-offset)) scaleY(1);
+  transition: transform 1s;
+}
+
+.aircon-fan.is-spinning {
+  transform: translateY(var(--fan-flip-offset)) scaleY(-1);
+}
+
+.air {
+  visibility: hidden;
+}
+
+.air.is-blowing {
+  visibility: visible;
+  animation: reveal 2s infinite forwards;
+}
+
+@keyframes reveal {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+
+/* 어지러움이나 전정기관 문제가 있는 사용자를 위해 움직임을 줄인다. */
+@media (prefers-reduced-motion: reduce) {
+  .aircon-fan,
+  .air.is-blowing,
+  .notice,
+  .who {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------ 텍스트 */
+
+.temp,
+.who,
+.notice {
+  position: absolute;
+  margin: 0;
+  text-align: center;
+  pointer-events: none;
+}
+
+.temp {
+  top: 50px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.who {
+  top: 24px;
+  font-size: 0.7rem;
+}
+
+.notice {
+  top: 4px;
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+}
+
+.who,
+.notice {
+  opacity: 1;
+  transition: opacity 0.6s;
+}
+
+.who.is-faded,
+.notice.is-faded {
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------ 컨트롤 */
+
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.icon-button,
+.pill,
+.link {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.icon-button,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* 최소 터치 타깃 크기. 기존 버튼은 padding 5px짜리라 모바일에서 누르기 어려웠다. */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 14px;
+  background: var(--ink);
+  color: #fff;
+}
+
+.icon-button:active,
+.pill:active {
+  background: var(--ink-soft);
+}
+
+.icon-button:disabled,
+.pill:disabled {
+  /* 닉네임을 정하기 전에는 버튼이 살아 있는 것처럼 보이지만 실제로는 아무
+     동작도 하지 않았다. 이제 disabled로 그 사실이 눈에 보이고 키보드
+     탐색에서도 건너뛰어진다. */
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.icon-button .icon-sound-off {
+  display: none;
+}
+
+.icon-button.is-muted .icon-sound-on {
+  display: none;
+}
+
+.icon-button.is-muted .icon-sound-off {
+  display: inline;
+}
+
+.pill.is-active {
+  background: linear-gradient(45deg, #ffc1c1, #fbdbab, #ffffcc, #bafbba, #bbe8ff, #dcbefd, #ffb7ff);
+  color: #000;
+}
+
+/* 키보드 사용자를 위한 포커스 표시. 기존 마크업에는 전혀 없었다. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ 푸터 / 다이얼로그 */
+
+.footer {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 12px;
+}
+
+.link {
+  padding: 4px;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  text-decoration: underline;
+}
+
+.dialog {
+  min-width: 240px;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog p {
+  margin: 0 0 8px;
+}
+
+.field-label {
+  font-weight: 600;
+}
+
+.dialog input {
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: var(--radius);
+  font: inherit;
+}

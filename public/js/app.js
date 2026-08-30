@@ -1,0 +1,237 @@
+import { BrownNoise } from "./audio.js";
+import { createConnection } from "./socket.js";
+import { incrementCount, readCount } from "./storage.js";
+import { language, strings } from "./strings.js";
+
+const NOTICE_DURATION_MS = 3000;
+
+const els = {
+  temp: document.querySelector("[data-temp]"),
+  who: document.querySelector("[data-who]"),
+  notice: document.querySelector("[data-notice]"),
+  fan: document.querySelector("[data-fan]"),
+  air: document.querySelector("[data-air]"),
+  plus: document.querySelector("[data-plus]"),
+  minus: document.querySelector("[data-minus]"),
+  sound: document.querySelector("[data-sound]"),
+  online: document.querySelector("[data-online]"),
+  nicknameDialog: document.querySelector("[data-nickname-dialog]"),
+  nicknameForm: document.querySelector("[data-nickname-form]"),
+  nicknameInput: document.querySelector("[data-nickname-input]"),
+  statsDialog: document.querySelector("[data-stats-dialog]"),
+  plusCount: document.querySelector("[data-plus-count]"),
+  minusCount: document.querySelector("[data-minus-count]"),
+  aboutDialog: document.querySelector("[data-about-dialog]"),
+};
+
+const state = {
+  username: "",
+  started: false,
+  online: false,
+  // 온도 범위는 서버가 init으로 알려준다. 아래 값은 오프라인 모드에서만 쓰는
+  // 기본값이고, 온라인이 되면 서버 값으로 덮어쓴다. 기존 코드는 18/30을
+  // 서버와 클라이언트에 각각 하드코딩해 두 곳이 조용히 어긋날 수 있었다.
+  min: 18,
+  max: 30,
+  temp: 18,
+};
+
+const audio = new BrownNoise();
+
+// ---------------------------------------------------------------- 렌더링
+
+function renderTemperature() {
+  els.temp.textContent = `${state.temp}℃`;
+}
+
+/**
+ * 온도가 낮을수록 크게, 높을수록 작게. 기존 brown-run.js의 매핑을 그대로
+ * 유지한다(오디오 품질 관련 수정은 별도 커밋).
+ */
+function gainForTemperature(temp) {
+  return temp * (-1 / 12) + 3;
+}
+
+/**
+ * 잠깐 보였다 사라지는 안내 문구.
+ *
+ * 기존에는 1초마다 도는 setInterval이 이미 붙어 있는 클래스를 영원히 다시
+ * 붙였다. 탭이 살아 있는 한 계속 도는 무의미한 DOM 쓰기였고, 게다가 표시
+ * 시간이 인터벌 위상에 따라 0~1000ms 사이에서 들쭉날쭉했다. 이벤트가 틱
+ * 직전에 오면 문구가 깜빡하고 사라졌다.
+ * 이제는 이벤트마다 타이머를 새로 잡아 표시 시간이 항상 일정하다.
+ */
+const fadeTimers = new WeakMap();
+
+function transientText(element, text) {
+  element.textContent = text;
+  element.classList.remove("is-faded");
+  clearTimeout(fadeTimers.get(element));
+  fadeTimers.set(
+    element,
+    setTimeout(() => element.classList.add("is-faded"), NOTICE_DURATION_MS),
+  );
+}
+
+function setOnlineLabel(text, pressed) {
+  els.online.textContent = text;
+  els.online.setAttribute("aria-pressed", String(pressed));
+  els.online.classList.toggle("is-active", pressed);
+}
+
+function setSoundLabel() {
+  const on = audio.playing;
+  els.sound.setAttribute("aria-label", on ? strings.soundOn : strings.soundOff);
+  els.sound.setAttribute("aria-pressed", String(on));
+  els.sound.classList.toggle("is-muted", !on);
+}
+
+// ---------------------------------------------------------------- 연결
+
+const connection = createConnection({
+  onInit({ temp, min, max }) {
+    state.min = min;
+    state.max = max;
+    state.temp = temp;
+    renderTemperature();
+    audio.setGain(gainForTemperature(temp));
+  },
+
+  onTempChange({ temp, changed, username }) {
+    state.temp = temp;
+    renderTemperature();
+    transientText(els.who, strings.adjustedBy(username));
+    if (!changed) {
+      transientText(els.notice, temp >= state.max ? strings.atMax : strings.atMin);
+    }
+    audio.setGain(gainForTemperature(temp));
+  },
+
+  onBlocked({ retryAfterMs }) {
+    const seconds = Math.max(1, Math.ceil((retryAfterMs ?? 0) / 1000));
+    transientText(els.notice, strings.rateLimited(seconds));
+  },
+
+  onStatus(status) {
+    if (!state.online) return;
+    if (status === "connected") setOnlineLabel(strings.onlineOn, true);
+    else if (status === "disconnected") transientText(els.notice, strings.connectionLost);
+    else if (status === "error") transientText(els.notice, strings.connectionFailed);
+    else if (status === "server-error") transientText(els.notice, strings.serverError);
+  },
+});
+
+// ---------------------------------------------------------------- 조작
+
+function adjust(direction) {
+  incrementCount(direction === "up" ? "plus" : "minus");
+
+  if (state.online) {
+    // 온라인에서는 서버가 진실이다. 낙관적 갱신을 하지 않고 tempChange를 기다린다.
+    connection.step(direction, state.username);
+    return;
+  }
+
+  const next = direction === "up" ? state.temp + 1 : state.temp - 1;
+  if (next < state.min || next > state.max) {
+    transientText(els.notice, direction === "up" ? strings.atMax : strings.atMin);
+    return;
+  }
+  state.temp = next;
+  renderTemperature();
+  audio.setGain(gainForTemperature(next));
+}
+
+async function toggleSound() {
+  if (audio.playing) {
+    audio.stop();
+  } else {
+    await audio.start(gainForTemperature(state.temp));
+  }
+  setSoundLabel();
+}
+
+function toggleOnline() {
+  state.online = !state.online;
+  if (state.online) {
+    setOnlineLabel(strings.connecting, true);
+    connection.connect();
+  } else {
+    // 기존에는 라벨만 바꾸고 소켓은 계속 열어 뒀다. 실제로 끊는다.
+    connection.disconnect();
+    setOnlineLabel(strings.onlineOff, false);
+  }
+}
+
+/** 닉네임을 받은 뒤 컨트롤을 활성화하고 에어컨을 켠다. */
+async function start(username) {
+  if (state.started) return;
+  state.started = true;
+  state.username = username;
+
+  for (const button of [els.plus, els.minus, els.sound, els.online]) {
+    button.disabled = false;
+  }
+
+  els.fan.classList.add("is-spinning");
+  els.air.classList.add("is-blowing");
+  renderTemperature();
+
+  // 사용자 제스처(폼 제출) 안에서 호출해야 자동재생 정책에 걸리지 않는다.
+  await toggleSound();
+}
+
+// ---------------------------------------------------------------- 초기화
+
+audio.addEventListener("failed", () => {
+  transientText(els.notice, strings.audioFailed);
+  setSoundLabel();
+});
+
+els.nicknameForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  els.nicknameDialog.close();
+  void start(els.nicknameInput.value);
+});
+
+els.plus.addEventListener("click", () => adjust("up"));
+els.minus.addEventListener("click", () => adjust("down"));
+els.sound.addEventListener("click", () => void toggleSound());
+els.online.addEventListener("click", toggleOnline);
+
+document.querySelector("[data-show-stats]").addEventListener("click", () => {
+  els.plusCount.textContent = String(readCount("plus"));
+  els.minusCount.textContent = String(readCount("minus"));
+  els.statsDialog.showModal();
+});
+document.querySelector("[data-show-about]").addEventListener("click", () => {
+  els.aboutDialog.showModal();
+});
+for (const button of document.querySelectorAll("[data-close-dialog]")) {
+  button.addEventListener("click", (event) => event.target.closest("dialog").close());
+}
+
+/** 마크업의 data-i18n 자리에 문자열을 채운다. */
+function applyStrings() {
+  document.documentElement.lang = language;
+  for (const element of document.querySelectorAll("[data-i18n]")) {
+    element.textContent = strings[element.dataset.i18n];
+  }
+  for (const element of document.querySelectorAll("[data-i18n-label]")) {
+    element.setAttribute("aria-label", strings[element.dataset.i18nLabel]);
+  }
+  els.nicknameInput.placeholder = strings.nicknamePlaceholder;
+  els.aboutDialog.querySelector("[data-about-lines]").replaceChildren(
+    ...strings.aboutLines.map((line) => {
+      const p = document.createElement("p");
+      p.textContent = line;
+      return p;
+    }),
+  );
+  setOnlineLabel(strings.onlineOff, false);
+  setSoundLabel();
+}
+
+applyStrings();
+renderTemperature();
+els.nicknameDialog.showModal();
