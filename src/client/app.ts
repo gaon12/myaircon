@@ -86,8 +86,38 @@ const currentGain = (temp: number): number =>
 
 // ---------------------------------------------------------------- 렌더링
 
+/** 화면에 떠 있어야 하는 온도 문자열. 표시와 복원이 같은 정의를 쓴다. */
+function temperatureText(): string {
+  return `${state.temp}℃`;
+}
+
 function renderTemperature(): void {
-  els.temp.textContent = `${state.temp}℃`;
+  const text = temperatureText();
+  // 아래 감시자가 우리 쓰기에도 반응하므로, 이미 맞는 값이면 건드리지 않는다.
+  if (els.temp.textContent !== text) els.temp.textContent = text;
+}
+
+/**
+ * 개발자도구 Elements에서 온도 텍스트를 직접 고쳐도 즉시 되돌린다.
+ *
+ * MutationObserver가 텍스트 변경을 감지하고, 현재 상태와 다르면 다시 그린다.
+ * 우리가 쓴 값은 이미 상태와 같으므로 다시 쓰지 않고, 따라서 무한 루프가 되지
+ * 않는다.
+ *
+ * 이건 표시의 정합성을 지키는 장치이지 보안 장치가 아니다. 콘솔에서 스크립트
+ * 상태를 직접 건드리는 것까지 막지는 못한다. 애초에 온도의 진실은 서버에
+ * 있고, 온라인 모드에서는 클라이언트가 무엇을 표시하든 서버 값이 다음
+ * tempChange에 그대로 실려 온다.
+ */
+function guardTemperatureDisplay(): void {
+  const observer = new MutationObserver(() => {
+    if (els.temp.textContent !== temperatureText()) renderTemperature();
+  });
+  observer.observe(els.temp, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
 }
 
 /**
@@ -370,4 +400,5 @@ for (const button of document.querySelectorAll("[data-close-dialog]")) {
 
 buildLanguageOptions();
 renderStrings();
+guardTemperatureDisplay();
 els.nicknameDialog.showModal();

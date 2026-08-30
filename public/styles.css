@@ -39,14 +39,21 @@
   /* 에어컨 그림의 크기. 아래 오프셋이 전부 이 값에 비례하므로 이 한 줄만
      바꾸면 전체가 함께 늘어나고 줄어든다. 화면 폭과 높이 양쪽으로 제한해
      가로 모드의 낮은 화면에서도 잘리지 않게 한다. */
-  --aircon-width: clamp(180px, min(88vw, 58vh), 350px);
+  --aircon-width: clamp(200px, min(92vw, 66vh), 460px);
 
-  /* 팬과 텍스트의 위치. 원래는 350px 기준으로 손으로 맞춘 픽셀값
-     (102px / 114px / 50px / 24px / 4px)이었다. 폭에 대한 비율로 바꿔서
-     크기가 달라져도 정렬이 유지된다. */
+  /* aircon0.png(2067x1181) 안에서 기기 본체가 실제로 차지하는 세로 구간.
+     이미지 위아래에 투명 여백이 있어서, 텍스트를 이미지 기준으로 놓으면
+     허공에 뜬다. 알파 채널을 측정해 얻은 값이다.
+       불투명 영역 y 323~761  ->  323/2067 = 0.1563, 761/2067 = 0.3682
+     폭에 대한 비율로 두었으므로 크기가 달라져도 그대로 맞는다. */
+  --device-top: calc(var(--aircon-width) * 0.1563);
+  --device-height: calc(var(--aircon-width) * 0.2119);
+
+  /* 팬 위치. 원래는 350px 기준으로 손으로 맞춘 픽셀값(102px / 114px)이었다. */
   --fan-offset: calc(var(--aircon-width) * 0.2914);
   --fan-flip-offset: calc(var(--aircon-width) * 0.3257);
-  --temp-top: calc(var(--aircon-width) * 0.1429);
+
+  /* 안내 문구는 기기 위쪽 여백에 놓는다(본체 바깥). */
   --who-top: calc(var(--aircon-width) * 0.0686);
   --notice-top: calc(var(--aircon-width) * 0.0114);
 
@@ -228,10 +235,17 @@ main {
 }
 
 .temp {
-  top: var(--temp-top);
+  /* 기기 본체 구간을 그대로 차지하고 그 안에서 가운데 정렬한다.
+     top 한 값으로 맞추면 글자 크기가 바뀔 때마다 어긋나지만, 이렇게 하면
+     폰트가 커지든 작아지든 언제나 본체 세로 정중앙에 온다. */
+  top: var(--device-top);
+  height: var(--device-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   /* 이 글자만 에어컨 본체(항상 흰색) 위에 얹힌다. */
   color: var(--on-device-ink);
-  font-size: clamp(14px, calc(var(--aircon-width) * 0.052), 20px);
+  font-size: clamp(16px, calc(var(--aircon-width) * 0.058), 28px);
   font-weight: 700;
 }
 
