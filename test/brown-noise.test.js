@@ -101,6 +101,33 @@ describe("게인 스테이징", () => {
     closeTo(gainForTemperature(30, 18, 30), GAIN.quietest);
   });
 
+  it("온풍기는 방향이 반대다 (높게 맞출수록 세게 돈다)", () => {
+    const heater = [18, 21, 24, 27, 30].map((t) => gainForTemperature(t, 18, 30, "heater"));
+    for (let i = 1; i < heater.length; i++) {
+      assert.ok(heater[i] > heater[i - 1], `${heater[i]} > ${heater[i - 1]}`);
+    }
+    closeTo(gainForTemperature(18, 18, 30, "heater"), GAIN.quietest);
+    closeTo(gainForTemperature(30, 18, 30, "heater"), GAIN.loudest);
+  });
+
+  it("같은 온도에서 에어컨과 온풍기의 게인이 서로 뒤집힌 값이다", () => {
+    for (const temp of [18, 20, 24, 28, 30]) {
+      const cool = gainForTemperature(temp, 18, 30, "aircon");
+      const heat = gainForTemperature(temp, 18, 30, "heater");
+      closeTo(cool + heat, GAIN.loudest + GAIN.quietest, 1e-9);
+    }
+  });
+
+  it("기기 종류를 생략하면 에어컨으로 본다", () => {
+    closeTo(gainForTemperature(18, 18, 30), gainForTemperature(18, 18, 30, "aircon"));
+  });
+
+  it("온풍기도 클리핑 헤드룸은 동일하다", () => {
+    // 두 기기가 같은 GAIN 범위를 쓰므로 최댓값이 같아야 한다.
+    const maxHeater = Math.max(...[18, 24, 30].map((t) => gainForTemperature(t, 18, 30, "heater")));
+    assert.equal(maxHeater, GAIN.loudest);
+  });
+
   it("설정으로 온도 범위를 바꿔도 게인 범위는 그대로다", () => {
     // 기존 공식 `temp * (-1/12) + 3`은 18~30을 암묵적으로 가정해서,
     // 범위를 바꾸면 게인이 음수가 되거나 폭주했다.

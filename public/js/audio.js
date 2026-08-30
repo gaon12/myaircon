@@ -24,14 +24,26 @@ export const GAIN = {
   quietest: 0.45,
 };
 
-/** 온도가 낮을수록 크게, 높을수록 작게. */
-export function gainForTemperature(temp, min, max) {
+/**
+ * 설정 온도를 음량으로 바꾼다.
+ *
+ * 에어컨은 낮게 맞출수록, 온풍기는 높게 맞출수록 더 세게 돌아간다.
+ * 그래서 기기 종류에 따라 방향이 반대다.
+ *
+ * @param {number} temp 현재 설정 온도
+ * @param {number} min 온도 하한
+ * @param {number} max 온도 상한
+ * @param {"aircon"|"heater"} [deviceKind]
+ */
+export function gainForTemperature(temp, min, max, deviceKind = "aircon") {
   // 기존 공식 `temp * (-1/12) + 3`은 18~30 범위를 암묵적으로 가정했다.
   // 설정으로 범위를 바꾸면 게인이 음수가 되거나 폭주할 수 있었다.
   if (!Number.isFinite(temp) || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
     return GAIN.quietest;
   }
-  const ratio = Math.min(1, Math.max(0, (temp - min) / (max - min)));
+  const position = Math.min(1, Math.max(0, (temp - min) / (max - min)));
+  // 0이면 가장 시끄럽고 1이면 가장 조용하다.
+  const ratio = deviceKind === "heater" ? 1 - position : position;
   return GAIN.loudest + (GAIN.quietest - GAIN.loudest) * ratio;
 }
 

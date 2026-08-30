@@ -14,13 +14,60 @@ describe("실시간 온도 조절", () => {
     // 클라이언트가 18/30을 하드코딩하지 않도록 서버가 범위를 알려준다.
     server = await startTestServer({ temperature: { min: 18, max: 30, initial: 22 } });
     const { init } = await server.connect();
-    assert.deepEqual(init, { temp: 22, min: 18, max: 30 });
+    assert.equal(init.temp, 22);
+    assert.equal(init.min, 18);
+    assert.equal(init.max, 30);
   });
 
   it("범위를 바꾸면 init에 그대로 반영된다", async () => {
     server = await startTestServer({ temperature: { min: 10, max: 12, initial: 11 } });
     const { init } = await server.connect();
-    assert.deepEqual(init, { temp: 11, min: 10, max: 12 });
+    assert.equal(init.temp, 11);
+    assert.equal(init.min, 10);
+    assert.equal(init.max, 12);
+  });
+
+  describe("기기 종류", () => {
+    it("init에 기기 종류와 이미지 경로가 실려 온다", async () => {
+      server = await startTestServer();
+      const { init } = await server.connect();
+      assert.ok(["aircon", "heater"].includes(init.device.kind));
+      assert.deepEqual(Object.keys(init.device.assets).sort(), ["air", "body", "fan"]);
+      for (const url of Object.values(init.device.assets)) {
+        assert.match(url, /^\/.+\.png$/);
+      }
+    });
+
+    it("DEVICE_MODE로 고정하면 계절과 무관하게 그것이 내려온다", async () => {
+      server = await startTestServer({ device: { mode: "heater" } });
+      const { init } = await server.connect();
+      assert.equal(init.device.kind, "heater");
+      // 온풍기 에셋이 아직 없으므로 에어컨 이미지로 폴백해야 한다
+      assert.equal(init.device.usingFallback, true);
+      assert.equal(init.device.assets.body, "/aircon0.png");
+    });
+
+    it("에어컨으로 고정하면 폴백이 아니다", async () => {
+      server = await startTestServer({ device: { mode: "aircon" } });
+      const { init } = await server.connect();
+      assert.equal(init.device.kind, "aircon");
+      assert.equal(init.device.usingFallback, false);
+    });
+
+    it("서버가 내려준 이미지 경로를 실제로 서빙한다", async () => {
+      server = await startTestServer({ device: { mode: "heater" } });
+      const { init } = await server.connect();
+      for (const url of Object.values(init.device.assets)) {
+        const res = await server.app.inject({ method: "GET", url });
+        assert.equal(res.statusCode, 200, `${url}를 서빙하지 못한다`);
+      }
+    });
+
+    it("healthz가 현재 기기를 보고한다", async () => {
+      server = await startTestServer({ device: { mode: "heater" } });
+      const res = await server.app.inject({ method: "GET", url: "/healthz" });
+      assert.equal(res.json().device, "heater");
+    });
   });
 
   it("plus/minus가 온도를 움직이고 전원에게 브로드캐스트된다", async () => {

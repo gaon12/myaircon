@@ -1,4 +1,5 @@
 import path from "node:path";
+import { DEVICE_MODES } from "./device.js";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -24,6 +25,20 @@ function readBool(name, fallback) {
   return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
 }
 
+/** "11,12,1,2,3" 형태를 1~12 정수 배열로 읽는다. */
+function readMonths(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const months = raw
+    .split(",")
+    .map((part) => Number(part.trim()))
+    .filter((n) => Number.isInteger(n));
+  if (months.length === 0 || months.some((n) => n < 1 || n > 12)) {
+    throw new Error(`환경변수 ${name}는 1~12 사이 월을 쉼표로 나열해야 합니다 (받은 값: ${raw})`);
+  }
+  return months;
+}
+
 function readString(name, fallback) {
   const raw = process.env[name];
   return raw === undefined || raw === "" ? fallback : raw;
@@ -33,6 +48,13 @@ const TEMP_MIN = readInt("TEMP_MIN", 18, { min: -50, max: 100 });
 const TEMP_MAX = readInt("TEMP_MAX", 30, { min: -50, max: 100 });
 if (TEMP_MIN >= TEMP_MAX) {
   throw new Error(`TEMP_MIN(${TEMP_MIN})은 TEMP_MAX(${TEMP_MAX})보다 작아야 합니다`);
+}
+
+const DEVICE_MODE = readString("DEVICE_MODE", "auto");
+if (!DEVICE_MODES.includes(DEVICE_MODE)) {
+  throw new Error(
+    `DEVICE_MODE는 ${DEVICE_MODES.join(" | ")} 중 하나여야 합니다 (받은 값: ${DEVICE_MODE})`,
+  );
 }
 
 export const config = {
@@ -51,6 +73,19 @@ export const config = {
     min: TEMP_MIN,
     max: TEMP_MAX,
     initial: readInt("TEMP_INITIAL", TEMP_MIN, { min: -50, max: 100 }),
+  },
+
+  // 여름엔 에어컨, 겨울엔 온풍기. auto면 서버의 현재 월로 판단하고,
+  // aircon/heater로 고정할 수도 있다. 공유 기기이므로 서버가 정해서 모두에게
+  // 같은 값을 내려준다.
+  device: {
+    mode: DEVICE_MODE,
+    winterMonths: readMonths("WINTER_MONTHS", [11, 12, 1, 2, 3]),
+    // 계절이 바뀌는 순간에도 서버가 켜져 있을 수 있으므로 주기적으로 다시 본다.
+    recheckIntervalMs: readInt("DEVICE_RECHECK_INTERVAL_MS", 3_600_000, {
+      min: 1000,
+      max: 86_400_000,
+    }),
   },
 
   nickname: {

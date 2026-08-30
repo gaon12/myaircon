@@ -10,6 +10,7 @@ const els = {
   temp: document.querySelector("[data-temp]"),
   who: document.querySelector("[data-who]"),
   notice: document.querySelector("[data-notice]"),
+  body: document.querySelector("[data-body]"),
   fan: document.querySelector("[data-fan]"),
   air: document.querySelector("[data-air]"),
   plus: document.querySelector("[data-plus]"),
@@ -30,7 +31,8 @@ const els = {
 
 const state = {
   locale: pickLocale(readValue("locale"), navigator.languages ?? [navigator.language]),
-  // 기기 종류(에어컨/온풍기)는 서버가 정한다. 계절 전환 커밋에서 동적으로 바뀐다.
+  // 기기 종류는 서버가 정한다(계절 자동 또는 설정 고정). 공유 기기이므로
+  // 사용자마다 다른 것을 보면 안 된다. 오프라인 모드에서는 아래 기본값을 쓴다.
   deviceKind: "aircon",
   username: "",
   started: false,
@@ -79,6 +81,26 @@ function transientText(element, text) {
   );
 }
 
+/**
+ * 서버가 알려준 기기(에어컨/온풍기)를 화면에 반영한다.
+ *
+ * 이미지 경로도 서버가 준다. 온풍기 전용 에셋이 아직 없어서 지금은 에어컨
+ * 이미지로 폴백되지만, public/에 파일을 떨어뜨리면 서버가 알아서 그 경로를
+ * 내려보내고 클라이언트는 바꿀 것이 없다.
+ */
+function applyDevice(device) {
+  if (!device) return;
+  state.deviceKind = device.kind;
+  document.documentElement.dataset.device = device.kind;
+
+  els.body.src = device.assets.body;
+  els.fan.src = device.assets.fan;
+  els.air.src = device.assets.air;
+
+  // 기기 이름이 제목과 안내 문구에 들어가므로 문자열을 다시 그린다.
+  renderStrings();
+}
+
 function setOnlineLabel(text, pressed) {
   els.online.textContent = text;
   els.online.setAttribute("aria-pressed", String(pressed));
@@ -95,12 +117,19 @@ function setSoundLabel() {
 // ---------------------------------------------------------------- 연결
 
 const connection = createConnection({
-  onInit({ temp, min, max }) {
+  onInit({ temp, min, max, device }) {
     state.min = min;
     state.max = max;
     state.temp = temp;
+    applyDevice(device);
     renderTemperature();
-    audio.setGain(gainForTemperature(temp, state.min, state.max));
+    audio.setGain(gainForTemperature(temp, state.min, state.max, state.deviceKind));
+  },
+
+  // 서버가 계절이 바뀐 것을 감지하면 접속 중에도 기기가 교체된다.
+  onDeviceChange(device) {
+    applyDevice(device);
+    audio.setGain(gainForTemperature(state.temp, state.min, state.max, state.deviceKind));
   },
 
   onTempChange({ temp, changed, username }) {
@@ -110,7 +139,7 @@ const connection = createConnection({
     if (!changed) {
       transientText(els.notice, temp >= state.max ? strings.atMax : strings.atMin);
     }
-    audio.setGain(gainForTemperature(temp, state.min, state.max));
+    audio.setGain(gainForTemperature(temp, state.min, state.max, state.deviceKind));
   },
 
   onBlocked({ retryAfterMs }) {
@@ -145,14 +174,14 @@ function adjust(direction) {
   }
   state.temp = next;
   renderTemperature();
-  audio.setGain(gainForTemperature(next, state.min, state.max));
+  audio.setGain(gainForTemperature(next, state.min, state.max, state.deviceKind));
 }
 
 async function toggleSound() {
   if (audio.playing) {
     audio.stop();
   } else {
-    await audio.start(gainForTemperature(state.temp, state.min, state.max));
+    await audio.start(gainForTemperature(state.temp, state.min, state.max, state.deviceKind));
   }
   setSoundLabel();
 }

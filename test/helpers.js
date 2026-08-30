@@ -8,7 +8,7 @@ import { config as baseConfig } from "../src/config.js";
 /** 중첩 객체까지 얕게 병합해 테스트용 설정을 만든다. */
 function mergeConfig(base, overrides) {
   const merged = { ...base, ...overrides };
-  for (const key of ["temperature", "rateLimit", "nickname", "security"]) {
+  for (const key of ["temperature", "rateLimit", "nickname", "security", "device"]) {
     merged[key] = { ...base[key], ...(overrides[key] ?? {}) };
   }
   return merged;

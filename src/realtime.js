@@ -1,5 +1,6 @@
 import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
 import { resolveClientIp } from "./client-ip.js";
+import { describeDevice } from "./device.js";
 import { normalizeNickname } from "./nickname.js";
 
 /**
@@ -12,6 +13,7 @@ import { normalizeNickname } from "./nickname.js";
  *   logger: { info: Function, warn: Function, error: Function },
  *   onChange?: (temp: number) => void,
  * }} deps
+ * @returns {{ stop: () => void }}
  */
 export function registerRealtime(io, { thermostat, config, logger, onChange }) {
   const limiter = new RateLimiterMemory({
@@ -19,6 +21,30 @@ export function registerRealtime(io, { thermostat, config, logger, onChange }) {
     duration: config.rateLimit.durationSeconds,
     blockDuration: config.rateLimit.blockSeconds,
   });
+
+  const readDevice = () =>
+    describeDevice({
+      mode: config.device.mode,
+      winterMonths: config.device.winterMonths,
+      publicDir: config.publicDir,
+    });
+
+  let device = readDevice();
+  logger.info(
+    { kind: device.kind, mode: config.device.mode, usingFallback: device.usingFallback },
+    "기기 종류를 결정했습니다",
+  );
+
+  // 서버가 계절이 바뀌는 순간에도 계속 켜져 있을 수 있다. 주기적으로 다시 보고
+  // 바뀌었으면 접속 중인 모두에게 알린다.
+  const seasonTimer = setInterval(() => {
+    const next = readDevice();
+    if (next.kind === device.kind) return;
+    device = next;
+    logger.info({ kind: device.kind }, "계절이 바뀌어 기기를 교체합니다");
+    io.emit("deviceChange", device);
+  }, config.device.recheckIntervalMs);
+  seasonTimer.unref?.();
 
   io.on("connection", (socket) => {
     // 핸드셰이크는 연결당 한 번만 해석하면 된다.
@@ -33,6 +59,7 @@ export function registerRealtime(io, { thermostat, config, logger, onChange }) {
       temp: thermostat.value,
       min: thermostat.min,
       max: thermostat.max,
+      device,
     });
 
     socket.on("plus", (payload) => void handleStep("up", payload));
@@ -85,4 +112,13 @@ export function registerRealtime(io, { thermostat, config, logger, onChange }) {
       if (changed) onChange?.(temp);
     }
   });
+
+  return {
+    get device() {
+      return device;
+    },
+    stop() {
+      clearInterval(seasonTimer);
+    },
+  };
 }

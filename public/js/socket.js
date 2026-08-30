@@ -18,7 +18,7 @@ import { io } from "/vendor/socket.io/socket.io.esm.min.js";
  * connect()/disconnect()로만 처리한다. off()를 쓰지 않으므로 재연결 후에도
  * 핸들러가 그대로 살아 있다.
  */
-export function createConnection({ onInit, onTempChange, onBlocked, onStatus }) {
+export function createConnection({ onInit, onTempChange, onBlocked, onStatus, onDeviceChange }) {
   const socket = io({
     // websocket 전용이면 이를 막는 네트워크에서 접속이 아예 불가능하다.
     transports: ["websocket", "polling"],
@@ -36,6 +36,7 @@ export function createConnection({ onInit, onTempChange, onBlocked, onStatus }) 
   socket.on("init", onInit);
   socket.on("tempChange", onTempChange);
   socket.on("blocked", onBlocked);
+  socket.on("deviceChange", onDeviceChange);
 
   return {
     get connected() {

@@ -85,15 +85,6 @@ export async function buildApp({ config = defaultConfig, logger } = {}) {
 
   app.get("/", (_req, reply) => reply.sendFile("index.html"));
 
-  // 배포 환경의 헬스체크/오토스케일러가 쓸 엔드포인트.
-  app.get("/healthz", async () => ({
-    status: "ok",
-    temp: thermostat.value,
-    min: thermostat.min,
-    max: thermostat.max,
-    uptimeSeconds: Math.floor(process.uptime()),
-  }));
-
   const io = new SocketIOServer(app.server, {
     // websocket 전용이면 사내 프록시나 일부 모바일 네트워크에서 아예 접속이
     // 안 된다. polling을 폴백으로 남겨 두고 가능하면 websocket으로 업그레이드한다.
@@ -105,14 +96,24 @@ export async function buildApp({ config = defaultConfig, logger } = {}) {
     serveClient: false,
   });
 
-  registerRealtime(io, {
+  const realtime = registerRealtime(io, {
     thermostat,
     config,
     logger: app.log,
     onChange: (temp) => store.schedule({ temp }),
   });
 
-  return { app, io, thermostat, store, config };
+  // realtime이 기기 종류를 들고 있으므로 그 뒤에 등록한다.
+  app.get("/healthz", async () => ({
+    status: "ok",
+    temp: thermostat.value,
+    min: thermostat.min,
+    max: thermostat.max,
+    device: realtime.device.kind,
+    uptimeSeconds: Math.floor(process.uptime()),
+  }));
+
+  return { app, io, thermostat, store, config, realtime };
 }
 
 /**
@@ -122,7 +123,8 @@ export async function buildApp({ config = defaultConfig, logger } = {}) {
  * app.close()가 ERR_SERVER_NOT_RUNNING을 만난다. 그래서 소켓과 engine.io
  * 타이머만 직접 정리하고 서버 종료는 Fastify에 맡긴다.
  */
-export async function closeApp({ app, io, store }) {
+export async function closeApp({ app, io, store, realtime }) {
+  realtime?.stop();
   io.disconnectSockets(true);
   io.engine.close();
   await app.close();
