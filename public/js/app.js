@@ -1,4 +1,4 @@
-import { BrownNoise } from "./audio.js";
+import { BrownNoise, gainForTemperature } from "./audio.js";
 import { createConnection } from "./socket.js";
 import { incrementCount, readCount } from "./storage.js";
 import { language, strings } from "./strings.js";
@@ -45,14 +45,6 @@ function renderTemperature() {
 }
 
 /**
- * 온도가 낮을수록 크게, 높을수록 작게. 기존 brown-run.js의 매핑을 그대로
- * 유지한다(오디오 품질 관련 수정은 별도 커밋).
- */
-function gainForTemperature(temp) {
-  return temp * (-1 / 12) + 3;
-}
-
-/**
  * 잠깐 보였다 사라지는 안내 문구.
  *
  * 기존에는 1초마다 도는 setInterval이 이미 붙어 있는 클래스를 영원히 다시
@@ -94,7 +86,7 @@ const connection = createConnection({
     state.max = max;
     state.temp = temp;
     renderTemperature();
-    audio.setGain(gainForTemperature(temp));
+    audio.setGain(gainForTemperature(temp, state.min, state.max));
   },
 
   onTempChange({ temp, changed, username }) {
@@ -104,7 +96,7 @@ const connection = createConnection({
     if (!changed) {
       transientText(els.notice, temp >= state.max ? strings.atMax : strings.atMin);
     }
-    audio.setGain(gainForTemperature(temp));
+    audio.setGain(gainForTemperature(temp, state.min, state.max));
   },
 
   onBlocked({ retryAfterMs }) {
@@ -139,14 +131,14 @@ function adjust(direction) {
   }
   state.temp = next;
   renderTemperature();
-  audio.setGain(gainForTemperature(next));
+  audio.setGain(gainForTemperature(next, state.min, state.max));
 }
 
 async function toggleSound() {
   if (audio.playing) {
     audio.stop();
   } else {
-    await audio.start(gainForTemperature(state.temp));
+    await audio.start(gainForTemperature(state.temp, state.min, state.max));
   }
   setSoundLabel();
 }
