@@ -17,16 +17,16 @@ Web Audio API로 만든 브라운 노이즈가 온도에 따라 음량을 바꾼
 
 ## 요구 사항
 
-- Node.js **22 이상** (`.nvmrc`는 24)
+- Node.js **24 이상**
 
 ## 실행
 
 ```bash
-npm install
+npm install         # prepare 훅이 TypeScript를 빌드한다
 npm start           # http://localhost:8080
 ```
 
-개발 중에는 파일 변경 시 자동 재시작:
+개발 중에는 파일 변경 시 자동 재시작 (빌드 없이 소스를 그대로 실행):
 
 ```bash
 npm run dev
@@ -40,14 +40,16 @@ npm run dev
 
 | 명령 | 설명 |
 | --- | --- |
-| `npm start` | 서버 실행 |
-| `npm run dev` | 자동 재시작 모드 |
-| `npm test` | 테스트 (Node 내장 러너) |
+| `npm run build` | TypeScript 컴파일 (`dist/`, `public/js/`) |
+| `npm start` | 서버 실행 (`prestart`가 먼저 빌드한다) |
+| `npm run dev` | 소스를 그대로 실행하며 자동 재시작 |
+| `npm run typecheck` | 서버/클라이언트/테스트 타입 검사 |
+| `npm test` | 테스트 (Node 내장 러너, 빌드 불필요) |
 | `npm run test:watch` | 테스트 watch 모드 |
 | `npm run lint` | Biome 린트 |
 | `npm run format` | Biome 포맷 적용 |
 | `npm run check` | 린트 + 포맷 자동 수정 |
-| `npm run ci` | `biome ci` + 테스트 (CI용, 파일을 고치지 않음) |
+| `npm run ci` | `biome ci` + 타입 검사 + 테스트 (CI용, 파일을 고치지 않음) |
 
 ## 설정
 
@@ -63,6 +65,7 @@ npm run dev
 | `TRUST_PROXY_HOPS` | `0` | 신뢰하는 리버스 프록시 홉 수 (아래 참고) |
 | `DEVICE_MODE` | `auto` | `auto` / `aircon` / `heater` (아래 참고) |
 | `WINTER_MONTHS` | `11,12,1,2,3` | 온풍기로 취급할 월 |
+| `SEASON_TIMEZONE` | (서버 로컬) | 계절 판정에 쓸 IANA 시간대 |
 | `TEMP_MIN` / `TEMP_MAX` | `18` / `30` | 온도 범위 |
 | `PERSIST_STATE` | `true` | 공유 온도를 디스크에 저장할지 |
 | `RATE_LIMIT_POINTS` | `10` | `RATE_LIMIT_DURATION_SECONDS`(기본 2초)당 허용 횟수 |
@@ -79,7 +82,14 @@ npm run dev
 | `aircon` | 계절과 무관하게 에어컨 고정 |
 | `heater` | 계절과 무관하게 온풍기 고정 |
 
-판단 기준은 **서버의 로컬 시간대**다. 배포 환경의 `TZ`를 맞춰 둘 것.
+판단 기준은 **서버 시간**이다. 접속자의 시간대가 아니다 — 보는 사람마다 계절이
+달라지면 안 되기 때문이다.
+
+기본값은 서버 프로세스의 로컬 시간대인데, 대부분의 컨테이너는 UTC라 배포
+환경에 따라 결과가 달라진다. `SEASON_TIMEZONE=Asia/Seoul` 처럼 명시하면
+어디에 배포하든 같은 기준으로 판정한다 (잘못된 이름은 부팅 시점에 거부된다).
+예를 들어 `2026-10-31 15:30 UTC`는 UTC로 보면 10월(에어컨), `Asia/Seoul`로
+보면 11월(온풍기)이다.
 서버가 몇 달씩 떠 있을 수 있으므로 부팅 때 한 번 정하고 끝내지 않고, 1시간마다
 (`DEVICE_RECHECK_INTERVAL_MS`) 다시 확인해 바뀌면 접속 중인 클라이언트에
 `deviceChange`를 보낸다.
@@ -157,8 +167,9 @@ GET /healthz  ->  {"status":"ok","temp":18,"min":18,"max":30,"device":"aircon","
 2. `public/js/i18n/index.js`의 `locales`에 한 줄 추가한다. 여기 나열한 순서가
    곧 선택 목록의 순서다.
 
-`npm test`가 **모든 로케일이 완전히 같은 키 집합을 갖는지** 검사한다.
-키를 빠뜨리면 화면에 `undefined`가 뜨는 대신 테스트가 실패한다.
+각 로케일 파일은 `satisfies Locale`로 계약을 검사받는다. 키를 빠뜨리면 화면에
+`undefined`가 뜨는 대신 **컴파일이 실패**한다. `npm test`도 같은 것을 확인한다
+(빌드를 건너뛰고 Node로 바로 실행하는 경로가 있기 때문).
 
 ## 테마
 
@@ -182,36 +193,89 @@ GET /healthz  ->  {"status":"ok","temp":18,"min":18,"max":30,"device":"aircon","
 
 ## 구조
 
+TypeScript로 작성하고 `tsc`가 두 갈래로 컴파일한다.
+
 ```
 src/
-  config.js       환경변수 기반 설정 (범위 검증 포함)
-  device.js       계절에 따른 기기 종류 판정과 이미지 경로 해석
-  thermostat.js   공유 온도값. I/O 없는 순수 로직
-  nickname.js     신뢰할 수 없는 닉네임 입력 정규화
-  client-ip.js    rate limit 키가 될 클라이언트 주소 해석
-  state-store.js  온도값 영속화 (디바운스 + 원자적 쓰기)
-  realtime.js     socket.io 이벤트 핸들러
-  app.js          Fastify + socket.io 조립 (listen 안 함)
-  server.js       부트스트랩 / 시그널 처리
+  shared/         서버와 클라이언트가 함께 쓰는 것
+    validate.ts   런타임 검증 유틸 (의존성 0)
+    protocol.ts   와이어 메시지 스키마 + 타입
+  server/
+    config.ts       환경변수 기반 설정 (부팅 시점 검증)
+    device.ts       계절에 따른 기기 종류 판정과 이미지 경로 해석
+    thermostat.ts   공유 온도값. I/O 없는 순수 로직
+    nickname.ts     신뢰할 수 없는 닉네임 입력 정규화
+    client-ip.ts    rate limit 키가 될 클라이언트 주소 해석
+    state-store.ts  온도값 영속화 (디바운스 + 원자적 쓰기)
+    realtime.ts     socket.io 이벤트 핸들러
+    app.ts          Fastify + socket.io 조립 (listen 안 함)
+    server.ts       부트스트랩 / 시그널 처리
+  client/
+    app.ts        진입점. DOM 배선과 상태
+    dom.ts        필수 요소 조회 (없으면 시작 시점에 던진다)
+    socket.ts     서버 연결 생명주기 + 수신 메시지 검증
+    audio.ts      브라운 노이즈 재생, 게인 스테이징
+    worklet.ts    AudioWorkletProcessor + 순수 DSP
+    storage.ts    localStorage 래퍼
+    theme.ts      라이트/다크 테마
+    i18n/         로케일 등록, BCP-47 협상, Locale 계약
 public/
   index.html      마크업 (인라인 script/style 없음)
   styles.css
-  js/
-    app.js        진입점. DOM 배선과 상태
-    socket.js     서버 연결 생명주기
-    audio.js      브라운 노이즈 재생, 게인 스테이징
-    worklet.js    AudioWorkletProcessor + 순수 DSP
-    storage.js    localStorage 래퍼
-    theme.js      라이트/다크 테마
-    i18n/
-      index.js    로케일 등록
-      negotiate.js  BCP-47 매칭 (순수 함수)
-      locales/    ko, en, ja, zh-Hans, zh-Hant
-test/             Node 내장 러너 기반 테스트
+test/             Node 내장 러너 기반 테스트 (*.test.ts)
 ```
 
-`buildApp()`은 조립만 하고 `listen()`은 `server.js`가 한다. 덕분에 테스트에서
+| 소스 | 산출물 | 쓰임 |
+| --- | --- | --- |
+| `src/server` + `src/shared` | `dist/` | `npm start`가 실행 |
+| `src/client` + `src/shared` | `public/js/` | 정적 서빙 |
+
+산출물은 둘 다 `.gitignore` 대상이고 `npm install`의 `prepare` 훅이 만들어 준다.
+
+`buildApp()`은 조립만 하고 `listen()`은 `server.ts`가 한다. 덕분에 테스트에서
 포트 0으로 임의 포트에 띄울 수 있다.
+
+### 빌드 없이 실행되는 이유
+
+소스에서는 `./foo.ts`로 import 하고, `rewriteRelativeImportExtensions`가 컴파일
+시 `./foo.js`로 바꿔 내보낸다. 덕분에 **Node 24가 소스를 그대로 실행**할 수 있어
+(타입 스트리핑) 테스트와 `npm run dev`는 빌드가 필요 없다. 배포는 컴파일된
+`dist/`를 쓴다.
+
+`erasableSyntaxOnly`가 `enum`/`namespace`처럼 "지울 수 없는 문법"을 금지해서
+이 성질이 실수로 깨지지 않도록 강제한다.
+
+## 런타임 검증
+
+TypeScript의 타입은 컴파일 시점에 전부 지워진다. 바깥에서 들어오는 값은
+타입을 적어둬도 런타임에는 아무것도 확인되지 않으므로, 경계마다 실제로 검사한다.
+
+`src/shared/validate.ts`는 의존성 없는 작은 검증기다. 스키마 하나에서
+런타임 검사와 컴파일 타임 타입을 함께 얻는다.
+
+```ts
+const initMessageSchema = object({
+  temp: integer(), min: integer(), max: integer(), device: deviceInfoSchema,
+});
+type InitMessage = Infer<typeof initMessageSchema>;
+```
+
+검사하는 지점:
+
+| 경계 | 하는 일 |
+| --- | --- |
+| 클라이언트가 받는 서버 메시지 | 형태가 다르면 화면을 건드리지 않고 콘솔에만 남긴다 |
+| 서버가 읽는 `state.json` | 손상·손편집·구버전 형식을 걸러내고 초기값으로 시작 |
+| 환경변수 | 범위·열거형·시간대까지 부팅 시점에 검사하고 던진다 |
+| 클라이언트가 보내는 닉네임 | `unknown`으로 받아 어떤 입력이든 안전한 문자열로 정규화 |
+| DOM 조회 | 없는 요소를 시작 시점에 이름과 함께 던진다 |
+
+`object`는 모르는 키를 조용히 버린다. 서버가 필드를 추가해도 예전 클라이언트가
+깨지지 않는다.
+
+zod 대신 직접 만든 이유는 클라이언트에 번들러가 없기 때문이다. 브라우저 코드는
+`tsc`가 뱉은 ESM을 그대로 서빙하므로, 의존성을 하나 추가하면 그 패키지의 브라우저
+빌드까지 따로 서빙해야 한다.
 
 ## 실시간 프로토콜
 
@@ -246,9 +310,19 @@ test/             Node 내장 러너 기반 테스트
 npm test
 ```
 
-Node 내장 테스트 러너를 쓴다. 별도 테스트 프레임워크 의존성은 없다.
+Node 내장 테스트 러너를 쓴다. 별도 테스트 프레임워크 의존성은 없고, 빌드 없이
+`.ts`를 그대로 실행한다.
+
 서버 유닛 테스트, `app.inject()` 기반 HTTP 통합 테스트, 실제 socket.io 접속을
-사용하는 실시간 통합 테스트, 그리고 오디오 DSP·게인 스테이징 테스트가 있다.
+사용하는 실시간 통합 테스트, 오디오 DSP·게인 스테이징, 검증 유틸과 와이어
+프로토콜 스키마 테스트가 있다.
+
+타입 검사는 별도다:
+
+```bash
+npm run typecheck   # 서버 / 클라이언트 / 테스트
+npm run ci          # lint + typecheck + test (파일을 고치지 않음)
+```
 
 ## 라이선스
 
