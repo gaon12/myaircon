@@ -26,19 +26,23 @@
     "codingapple (https://github.com/codingapple1) — original author"
   ],
   "type": "module",
-  "main": "src/server.js",
+  "main": "dist/server/server.js",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "test": "node --test \"test/**/*.test.js\"",
+    "build": "tsc -p tsconfig.server.json && tsc -p tsconfig.client.json",
+    "prestart": "npm run build",
+    "start": "node dist/server/server.js",
+    "dev": "node --watch src/server/server.ts",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "test:watch": "node --test --watch \"test/**/*.test.ts\"",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check --write .",
-    "ci": "biome ci . && node --test \"test/**/*.test.js\"",
-    "test:watch": "node --test --watch \"test/**/*.test.js\""
+    "ci": "biome ci . && npm run typecheck && node --test \"test/**/*.test.ts\"",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
@@ -48,6 +52,8 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.11"
+    "@biomejs/biome": "^2.5.11",
+    "@types/node": "^24.13.3",
+    "typescript": "^7.0.2"
   }
 }

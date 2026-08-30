@@ -1,0 +1,13 @@
+{
+  "//": "\uc5d0\ub514\ud130\uac00 \uae30\ubcf8\uc73c\ub85c \uc9d1\uc5b4\ub4dc\ub294 \uc124\uc815. \uc2e4\uc81c \ube4c\ub4dc\ub294 tsconfig.server.json\uacfc tsconfig.client.json\uc774 \ud55c\ub2e4.",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"],
+    "noEmit": true,
+    "paths": {
+      "/vendor/socket.io/socket.io.esm.min.js": ["./src/client/vendor/socket.io-client.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

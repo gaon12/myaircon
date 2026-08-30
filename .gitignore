@@ -20,8 +20,14 @@ yarn-error.log*
 # build & tooling caches
 coverage/
 .nyc_output/
-dist/
 *.tsbuildinfo
+
+# TypeScript 산출물. 소스는 src/ 이며 tsc가 아래로 뱉는다.
+#   src/server + src/shared -> dist/
+#   src/client + src/shared -> public/js/
+# npm install 시 prepare 스크립트가 자동으로 빌드한다.
+dist/
+public/js/
 
 # editors
 .vscode/*

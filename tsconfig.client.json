@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": [],
+    "rootDir": "src",
+    "outDir": "public/js",
+    "paths": {
+      "/vendor/socket.io/socket.io.esm.min.js": ["./src/client/vendor/socket.io-client.d.ts"]
+    }
+  },
+  "include": ["src/client/**/*.ts", "src/shared/**/*.ts"]
+}
