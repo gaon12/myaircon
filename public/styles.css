@@ -1,27 +1,101 @@
 /*
- * 기존에는 스타일이 네 군데에 흩어져 있었다.
- *   1. <body style="margin: 0">
- *   2. <body> 안의 <style> 블록
- *   3. <span style="position: fixed; ..."> 인라인 스타일
- *   4. SVG 속성
- * 게다가 .air 셀렉터가 7줄 간격으로 두 번 정의돼 있었다.
- * 여기 한 파일로 모으고, 손으로 맞춰 놓았던 매직 넘버는 커스텀 프로퍼티로 뺐다.
+ * 기존에는 스타일이 네 군데(body 인라인 style, <body> 안의 <style>, span의
+ * 인라인 style, SVG 속성)에 흩어져 있었고 .air 셀렉터가 두 번 정의돼 있었다.
+ * 여기 한 파일로 모았다.
+ *
+ * 색은 전부 커스텀 프로퍼티로 뺐다. 라이트 값을 :root에 두고, 다크 값은
+ *   1) OS가 다크이고 사용자가 라이트로 고정하지 않은 경우
+ *   2) 사용자가 다크로 고정한 경우
+ * 두 곳에서 덮어쓴다. 두 블록의 내용은 같지만, 미디어 쿼리 안과 밖을 하나의
+ * 셀렉터 목록으로 합칠 수 없어 불가피하게 중복된다.
  */
 
 :root {
-  --aircon-width: 350px;
+  color-scheme: light;
 
-  /* 팬 이미지를 에어컨 본체에 맞추는 오프셋. 기존에는 102px과 114px이라는
-     두 매직 넘버가 12px 차이로 따로 적혀 있어서, PNG를 바꾸면 둘 다 손으로
-     다시 맞춰야 했다. 기준값 하나와 그 차이로 표현한다. */
-  --fan-offset: 102px;
-  --fan-flip-offset: calc(var(--fan-offset) + 12px);
-
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
   --ink: #272727;
   --ink-soft: #6b6b6b;
-  --surface: #ffffff;
-  --radius: 6px;
+  --border: #dddddd;
+
+  --control-bg: #272727;
+  --control-fg: #ffffff;
+  --control-active: #6b6b6b;
+
   --focus: #2f6fed;
+  --backdrop: rgb(0 0 0 / 35%);
+
+  /* 에어컨 본체 그림은 테마와 무관하게 항상 흰색이다. 그 위에 얹히는 온도
+     텍스트까지 --ink로 칠하면 다크 모드에서 흰 글자가 흰 본체 위에 놓여
+     사라진다. 기기 위에 올라가는 글자는 테마와 무관하게 어두운 색으로 고정한다.
+     (나중에 어두운 색 기기 에셋을 넣는다면 이 값도 기기별로 바꿔야 한다) */
+  --on-device-ink: #272727;
+
+  /* 바람 그래픽은 흰 배경 위에 얹히도록 그려진 반투명 이미지다. 어두운
+     배경에서는 그대로 두면 밝은 회색 판때기처럼 보인다. */
+  --air-blend: normal;
+
+  /* 에어컨 그림의 크기. 아래 오프셋이 전부 이 값에 비례하므로 이 한 줄만
+     바꾸면 전체가 함께 늘어나고 줄어든다. 화면 폭과 높이 양쪽으로 제한해
+     가로 모드의 낮은 화면에서도 잘리지 않게 한다. */
+  --aircon-width: clamp(180px, min(88vw, 58vh), 350px);
+
+  /* 팬과 텍스트의 위치. 원래는 350px 기준으로 손으로 맞춘 픽셀값
+     (102px / 114px / 50px / 24px / 4px)이었다. 폭에 대한 비율로 바꿔서
+     크기가 달라져도 정렬이 유지된다. */
+  --fan-offset: calc(var(--aircon-width) * 0.2914);
+  --fan-flip-offset: calc(var(--aircon-width) * 0.3257);
+  --temp-top: calc(var(--aircon-width) * 0.1429);
+  --who-top: calc(var(--aircon-width) * 0.0686);
+  --notice-top: calc(var(--aircon-width) * 0.0114);
+
+  --radius: 6px;
+  --footer-height: 44px;
+}
+
+/* 1) OS가 다크. 단, 사용자가 라이트로 고정했다면 적용하지 않는다. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --surface: #14161a;
+    --surface-raised: #1d2026;
+    --ink: #e8eaed;
+    --ink-soft: #a0a6b0;
+    --border: #333842;
+
+    /* 어두운 배경에서는 버튼을 밝게 뒤집어야 대비가 확보된다. */
+    --control-bg: #e8eaed;
+    --control-fg: #14161a;
+    --control-active: #b8bec8;
+
+    --focus: #79a6ff;
+    --backdrop: rgb(0 0 0 / 60%);
+
+    /* screen 합성으로 바람이 배경을 덮는 대신 빛을 더하게 만든다. */
+    --air-blend: screen;
+  }
+}
+
+/* 2) 사용자가 다크로 고정. OS 설정과 무관하게 이긴다. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #14161a;
+  --surface-raised: #1d2026;
+  --ink: #e8eaed;
+  --ink-soft: #a0a6b0;
+  --border: #333842;
+
+  --control-bg: #e8eaed;
+  --control-fg: #14161a;
+  --control-active: #b8bec8;
+
+  --focus: #79a6ff;
+  --backdrop: rgb(0 0 0 / 60%);
+
+  --air-blend: screen;
 }
 
 * {
@@ -30,10 +104,17 @@
 
 body {
   margin: 0;
-  padding: 0 12px;
+  /* 하단 고정 푸터에 내용이 가리지 않도록 여유를 두고, 노치가 있는 기기에서는
+     안전 영역만큼 더 확보한다. */
+  padding: 12px 12px calc(var(--footer-height) + 16px + env(safe-area-inset-bottom, 0px));
   background: var(--surface);
   color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+  font-family:
+    system-ui, -apple-system, "Segoe UI", "Noto Sans KR", "Noto Sans JP", "Noto Sans SC",
+    "Noto Sans TC", sans-serif;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 /* 화면에서는 숨기지만 스크린 리더에는 읽히는 텍스트.
@@ -50,12 +131,20 @@ body {
   border: 0;
 }
 
+main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(8px, 2.5vh, 20px);
+}
+
 /* ------------------------------------------------------------ 에어컨 */
 
 .aircon-box {
   position: relative;
   display: flex;
   justify-content: center;
+  width: var(--aircon-width);
 }
 
 .aircon {
@@ -67,6 +156,7 @@ body {
 .aircon-fan,
 .air {
   position: absolute;
+  top: 0;
 }
 
 .aircon-fan {
@@ -80,6 +170,14 @@ body {
 
 .air {
   visibility: hidden;
+  /* .air.is-blowing의 reveal 애니메이션이 opacity를 직접 제어하므로
+     밝기 조절은 opacity가 아니라 합성 모드로 한다. */
+  mix-blend-mode: var(--air-blend);
+  /* 바람 이미지는 흰 배경으로 스며들도록 그려져 있어서, 어두운 배경에서는
+     아래쪽 경계가 각진 판때기처럼 드러난다. 알파를 직접 떨어뜨려 어느
+     배경에서든 자연스럽게 사라지게 한다. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent 92%);
+  mask-image: linear-gradient(to bottom, #000 45%, transparent 92%);
 }
 
 .air.is-blowing {
@@ -103,10 +201,14 @@ body {
 
 /* 어지러움이나 전정기관 문제가 있는 사용자를 위해 움직임을 줄인다. */
 @media (prefers-reduced-motion: reduce) {
+  body,
   .aircon-fan,
   .air.is-blowing,
   .notice,
-  .who {
+  .who,
+  .icon-button,
+  .pill,
+  .link {
     transition: none;
     animation: none;
   }
@@ -118,25 +220,29 @@ body {
 .who,
 .notice {
   position: absolute;
+  left: 0;
+  right: 0;
   margin: 0;
   text-align: center;
   pointer-events: none;
 }
 
 .temp {
-  top: 50px;
-  font-size: 1.1rem;
+  top: var(--temp-top);
+  /* 이 글자만 에어컨 본체(항상 흰색) 위에 얹힌다. */
+  color: var(--on-device-ink);
+  font-size: clamp(14px, calc(var(--aircon-width) * 0.052), 20px);
   font-weight: 700;
 }
 
 .who {
-  top: 24px;
-  font-size: 0.7rem;
+  top: var(--who-top);
+  font-size: clamp(10px, calc(var(--aircon-width) * 0.032), 12px);
 }
 
 .notice {
-  top: 4px;
-  font-size: 0.7rem;
+  top: var(--notice-top);
+  font-size: clamp(10px, calc(var(--aircon-width) * 0.032), 12px);
   color: var(--ink-soft);
 }
 
@@ -156,20 +262,21 @@ body {
 .controls {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
 }
 
 .icon-button,
 .pill,
-.link {
+.link,
+.select {
   font: inherit;
   cursor: pointer;
-  border: 0;
   border-radius: var(--radius);
   transition:
-    background 0.2s,
-    color 0.2s;
+    background-color 0.2s,
+    color 0.2s,
+    border-color 0.2s;
 }
 
 .icon-button,
@@ -182,13 +289,14 @@ body {
   min-width: 44px;
   min-height: 44px;
   padding: 8px 14px;
-  background: var(--ink);
-  color: #fff;
+  border: 0;
+  background: var(--control-bg);
+  color: var(--control-fg);
 }
 
 .icon-button:active,
 .pill:active {
-  background: var(--ink-soft);
+  background: var(--control-active);
 }
 
 .icon-button:disabled,
@@ -214,7 +322,8 @@ body {
 
 .pill.is-active {
   background: linear-gradient(45deg, #ffc1c1, #fbdbab, #ffffcc, #bafbba, #bbe8ff, #dcbefd, #ffb7ff);
-  color: #000;
+  /* 파스텔 그라디언트라 라이트/다크 어느 쪽에서도 검은 글자가 잘 읽힌다. */
+  color: #101010;
 }
 
 /* 키보드 사용자를 위한 포커스 표시. 기존 마크업에는 전혀 없었다. */
@@ -223,44 +332,54 @@ body {
   outline-offset: 2px;
 }
 
-/* ------------------------------------------------------------ 푸터 / 다이얼로그 */
+/* ------------------------------------------------------------ 푸터 */
 
 .footer {
   position: fixed;
-  right: 10px;
-  bottom: 10px;
+  inset: auto 0 0 0;
   display: flex;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: var(--footer-height);
+  padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid var(--border);
 }
 
 .link {
-  padding: 4px;
+  padding: 6px;
+  border: 0;
   background: none;
   color: var(--ink-soft);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   text-decoration: underline;
 }
 
 .select {
-  padding: 4px 6px;
-  border: 1px solid #ccc;
-  border-radius: var(--radius);
-  background: var(--surface);
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
   color: var(--ink);
-  font: inherit;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
+/* ------------------------------------------------------------ 다이얼로그 */
+
 .dialog {
-  min-width: 240px;
+  width: min(320px, calc(100vw - 32px));
   padding: 20px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  font-size: 0.8rem;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 0.85rem;
 }
 
 .dialog::backdrop {
-  background: rgb(0 0 0 / 35%);
+  background: var(--backdrop);
 }
 
 .dialog form {
@@ -271,6 +390,7 @@ body {
 
 .dialog p {
   margin: 0 0 8px;
+  line-height: 1.5;
 }
 
 .field-label {
@@ -280,7 +400,24 @@ body {
 .dialog input {
   min-height: 44px;
   padding: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
   font: inherit;
+  /* iOS Safari는 16px 미만 입력란에 포커스하면 화면을 확대한다. */
+  font-size: 16px;
+}
+
+/* ------------------------------------------------------------ 좁은 화면 */
+
+@media (max-width: 380px) {
+  .footer {
+    gap: 6px;
+  }
+
+  .link,
+  .select {
+    font-size: 0.7rem;
+  }
 }

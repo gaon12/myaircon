@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Aircon</title>
     <meta name="description" content="모두가 함께 쓰는 온라인 에어컨과 브라운 노이즈 생성기" />
+    <!-- 라이트/다크 모두 지원한다는 것을 브라우저에 알려, 사용자 CSS가 붙기 전
+         첫 페인트에서 흰 화면이 번쩍이지 않게 한다. -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -106,6 +110,8 @@
     <footer class="footer">
       <label class="visually-hidden" for="language" data-i18n="language">언어</label>
       <select id="language" class="select" data-language></select>
+      <label class="visually-hidden" for="theme" data-i18n="theme">테마</label>
+      <select id="theme" class="select" data-theme-select></select>
       <button type="button" class="link" data-show-stats data-i18n="stats">통계</button>
       <button type="button" class="link" data-show-about data-i18n="about">정보</button>
     </footer>

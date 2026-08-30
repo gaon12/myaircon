@@ -2,6 +2,7 @@ import { BrownNoise, gainForTemperature } from "./audio.js";
 import { localeOptions, locales, pickLocale } from "./i18n/index.js";
 import { createConnection } from "./socket.js";
 import { incrementCount, readCount, readValue, writeValue } from "./storage.js";
+import { createTheme, THEMES } from "./theme.js";
 
 const NOTICE_DURATION_MS = 3000;
 
@@ -24,6 +25,7 @@ const els = {
   aboutDialog: document.querySelector("[data-about-dialog]"),
   aboutLines: document.querySelector("[data-about-lines]"),
   languageSelect: document.querySelector("[data-language]"),
+  themeSelect: document.querySelector("[data-theme-select]"),
 };
 
 const state = {
@@ -42,6 +44,7 @@ const state = {
 };
 
 const audio = new BrownNoise();
+const theme = createTheme();
 
 /** 현재 로케일의 문자열 테이블. 언어를 바꾸면 이 참조가 갈아끼워진다. */
 let strings = locales[state.locale];
@@ -230,6 +233,7 @@ function renderStrings() {
   );
   setSoundLabel();
   renderTemperature();
+  buildThemeOptions();
 }
 
 function setLocale(code) {
@@ -253,6 +257,27 @@ function buildLanguageOptions() {
   );
 }
 
+// ---------------------------------------------------------------- 테마
+
+const THEME_LABEL_KEY = {
+  system: "themeSystem",
+  light: "themeLight",
+  dark: "themeDark",
+};
+
+/** 테마 이름은 UI 언어를 따라야 하므로 언어가 바뀔 때마다 다시 그린다. */
+function buildThemeOptions() {
+  els.themeSelect.replaceChildren(
+    ...THEMES.map((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = strings[THEME_LABEL_KEY[value]];
+      option.selected = value === theme.value;
+      return option;
+    }),
+  );
+}
+
 // ---------------------------------------------------------------- 초기화
 
 audio.addEventListener("failed", () => {
@@ -271,6 +296,7 @@ els.minus.addEventListener("click", () => adjust("down"));
 els.sound.addEventListener("click", () => void toggleSound());
 els.online.addEventListener("click", toggleOnline);
 els.languageSelect.addEventListener("change", (event) => setLocale(event.target.value));
+els.themeSelect.addEventListener("change", (event) => theme.set(event.target.value));
 
 document.querySelector("[data-show-stats]").addEventListener("click", () => {
   els.plusCount.textContent = String(readCount("plus"));
