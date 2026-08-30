@@ -85,8 +85,11 @@ export const config = {
         "frame-ancestors 'none'",
         "form-action 'self'",
         "img-src 'self' data:",
-        "script-src 'self'",
-        "style-src 'self'",
+        // TODO(csp): public/index.html이 아직 인라인 <script>/<style>을 쓰고 있어
+        // 'unsafe-inline'이 없으면 페이지가 통째로 죽는다. 마크업과 스크립트를
+        // 외부 파일로 분리하는 커밋에서 이 두 줄의 'unsafe-inline'을 제거한다.
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
         "worker-src 'self'",
         "connect-src 'self'",
       ].join("; "),
