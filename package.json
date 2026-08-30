@@ -1,20 +1,52 @@
 {
-  "name": "aircon",
-  "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
-  "scripts": {
-    "start": "pm2 start server.js --no-daemon",
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "name": "myaircon",
+  "version": "2.0.0",
+  "description": "Online air conditioner — a thermostat everyone on the internet shares, with a brown-noise generator built on the Web Audio API.",
+  "keywords": [
+    "aircon",
+    "thermostat",
+    "brown-noise",
+    "web-audio",
+    "audioworklet",
+    "socket.io",
+    "fastify",
+    "realtime"
+  ],
+  "homepage": "https://github.com/gaon12/myaircon#readme",
+  "bugs": {
+    "url": "https://github.com/gaon12/myaircon/issues"
   },
-  "keywords": [],
-  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gaon12/myaircon.git"
+  },
   "license": "ISC",
+  "author": "gaon12 <gokirito12@gmail.com>",
+  "contributors": [
+    "codingapple (https://github.com/codingapple1) — original author"
+  ],
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
+    "ci": "biome ci . && node --test test/"
+  },
   "dependencies": {
-    "@fastify/static": "^7.0.4",
-    "fastify-socket.io": "^5.0.0",
-    "pm2": "^6.0.8",
-    "rate-limiter-flexible": "^5.0.5",
-    "socket.io": "^4.7.5"
+    "@fastify/static": "^10.1.3",
+    "fastify": "^5.12.1",
+    "rate-limiter-flexible": "^11.2.0",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.11",
+    "socket.io-client": "^4.8.3"
   }
 }
