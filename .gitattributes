@@ -1,0 +1,9 @@
+# Biome은 lineEnding: "lf"로 포맷한다. 윈도우에서 체크아웃해도 워킹 트리가
+# CRLF로 바뀌지 않도록 강제해, 포맷터와 git이 서로를 되돌리는 상황을 막는다.
+* text=auto eol=lf
+
+*.png  binary
+*.ico  binary
+*.webp binary
+*.woff binary
+*.woff2 binary

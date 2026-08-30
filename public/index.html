@@ -222,9 +222,9 @@
 
   <script>
 
-    let tempElement = document.querySelector('.temp')
-    let whoElement = document.querySelector('.who')
-    let whoAlertElement = document.querySelector('.who-alert')
+    const tempElement = document.querySelector('.temp')
+    const whoElement = document.querySelector('.who')
+    const whoAlertElement = document.querySelector('.who-alert')
     let currentTemp = 30;
     let isOnline = false;
     let isSoundOn = false;
@@ -280,7 +280,7 @@
 
 
     //real time mode on/off button
-    document.querySelector('.real-time').addEventListener('click', function(){
+    document.querySelector('.real-time').addEventListener('click', ()=> {
 
       if (!socket){
         socket = io({transports: ["websocket"]});
