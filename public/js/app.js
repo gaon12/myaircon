@@ -1,7 +1,7 @@
 import { BrownNoise, gainForTemperature } from "./audio.js";
+import { localeOptions, locales, pickLocale } from "./i18n/index.js";
 import { createConnection } from "./socket.js";
-import { incrementCount, readCount } from "./storage.js";
-import { language, strings } from "./strings.js";
+import { incrementCount, readCount, readValue, writeValue } from "./storage.js";
 
 const NOTICE_DURATION_MS = 3000;
 
@@ -22,9 +22,14 @@ const els = {
   plusCount: document.querySelector("[data-plus-count]"),
   minusCount: document.querySelector("[data-minus-count]"),
   aboutDialog: document.querySelector("[data-about-dialog]"),
+  aboutLines: document.querySelector("[data-about-lines]"),
+  languageSelect: document.querySelector("[data-language]"),
 };
 
 const state = {
+  locale: pickLocale(readValue("locale"), navigator.languages ?? [navigator.language]),
+  // 기기 종류(에어컨/온풍기)는 서버가 정한다. 계절 전환 커밋에서 동적으로 바뀐다.
+  deviceKind: "aircon",
   username: "",
   started: false,
   online: false,
@@ -37,6 +42,12 @@ const state = {
 };
 
 const audio = new BrownNoise();
+
+/** 현재 로케일의 문자열 테이블. 언어를 바꾸면 이 참조가 갈아끼워진다. */
+let strings = locales[state.locale];
+
+/** 현재 기기 종류의 이름 (에어컨 / 온풍기). */
+const deviceName = () => strings.device[state.deviceKind];
 
 // ---------------------------------------------------------------- 렌더링
 
@@ -173,6 +184,75 @@ async function start(username) {
   await toggleSound();
 }
 
+document.querySelector("[data-show-stats]").addEventListener("click", () => {
+  els.plusCount.textContent = String(readCount("plus"));
+  els.minusCount.textContent = String(readCount("minus"));
+  els.statsDialog.showModal();
+});
+document.querySelector("[data-show-about]").addEventListener("click", () => {
+  els.aboutDialog.showModal();
+});
+for (const button of document.querySelectorAll("[data-close-dialog]")) {
+  button.addEventListener("click", (event) => event.target.closest("dialog").close());
+}
+
+// ---------------------------------------------------------------- 언어
+
+/** 마크업의 data-i18n 자리에 현재 로케일 문자열을 채운다. 몇 번 불러도 안전하다. */
+function renderStrings() {
+  document.documentElement.lang = state.locale;
+  document.title = strings.appName(deviceName());
+
+  for (const element of document.querySelectorAll("[data-i18n]")) {
+    element.textContent = strings[element.dataset.i18n];
+  }
+  for (const element of document.querySelectorAll("[data-i18n-label]")) {
+    element.setAttribute("aria-label", strings[element.dataset.i18nLabel]);
+  }
+
+  els.nicknameInput.placeholder = strings.nicknamePlaceholder;
+  els.aboutLines.replaceChildren(
+    ...strings.aboutLines(deviceName()).map((line) => {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = line;
+      return paragraph;
+    }),
+  );
+
+  // 상태에 따라 달라지는 라벨은 data-i18n으로 처리할 수 없다.
+  setOnlineLabel(
+    state.online
+      ? connection.connected
+        ? strings.onlineOn
+        : strings.connecting
+      : strings.onlineOff,
+    state.online,
+  );
+  setSoundLabel();
+  renderTemperature();
+}
+
+function setLocale(code) {
+  if (!Object.hasOwn(locales, code) || code === state.locale) return;
+  state.locale = code;
+  strings = locales[code];
+  writeValue("locale", code);
+  renderStrings();
+}
+
+function buildLanguageOptions() {
+  els.languageSelect.replaceChildren(
+    ...localeOptions.map(([code, name]) => {
+      const option = document.createElement("option");
+      option.value = code;
+      // 각 언어의 이름은 그 언어 자신의 표기로 둔다(현재 UI 언어와 무관하게 읽힌다).
+      option.textContent = name;
+      option.selected = code === state.locale;
+      return option;
+    }),
+  );
+}
+
 // ---------------------------------------------------------------- 초기화
 
 audio.addEventListener("failed", () => {
@@ -190,6 +270,7 @@ els.plus.addEventListener("click", () => adjust("up"));
 els.minus.addEventListener("click", () => adjust("down"));
 els.sound.addEventListener("click", () => void toggleSound());
 els.online.addEventListener("click", toggleOnline);
+els.languageSelect.addEventListener("change", (event) => setLocale(event.target.value));
 
 document.querySelector("[data-show-stats]").addEventListener("click", () => {
   els.plusCount.textContent = String(readCount("plus"));
@@ -203,27 +284,6 @@ for (const button of document.querySelectorAll("[data-close-dialog]")) {
   button.addEventListener("click", (event) => event.target.closest("dialog").close());
 }
 
-/** 마크업의 data-i18n 자리에 문자열을 채운다. */
-function applyStrings() {
-  document.documentElement.lang = language;
-  for (const element of document.querySelectorAll("[data-i18n]")) {
-    element.textContent = strings[element.dataset.i18n];
-  }
-  for (const element of document.querySelectorAll("[data-i18n-label]")) {
-    element.setAttribute("aria-label", strings[element.dataset.i18nLabel]);
-  }
-  els.nicknameInput.placeholder = strings.nicknamePlaceholder;
-  els.aboutDialog.querySelector("[data-about-lines]").replaceChildren(
-    ...strings.aboutLines.map((line) => {
-      const p = document.createElement("p");
-      p.textContent = line;
-      return p;
-    }),
-  );
-  setOnlineLabel(strings.onlineOff, false);
-  setSoundLabel();
-}
-
-applyStrings();
-renderTemperature();
+buildLanguageOptions();
+renderStrings();
 els.nicknameDialog.showModal();

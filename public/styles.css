@@ -241,6 +241,16 @@ body {
   text-decoration: underline;
 }
 
+.select {
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.7rem;
+}
+
 .dialog {
   min-width: 240px;
   padding: 20px;
