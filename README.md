@@ -185,6 +185,50 @@ GET /api/admin/*   -> 관리 API (ADMIN_TOKEN 필요, 아래 참고)
 컨테이너로 배포한다면 `data/`를 볼륨으로 잡거나 `PERSIST_STATE=false` /
 `STATS_ENABLED=false`로 끈다.
 
+## 오류 화면
+
+404나 500이 나면 Fastify 기본값인 JSON이 나왔다. 주소를 잘못 친 사람에게
+`{"message":"Route GET:/nope not found",...}`를 보여주는 것은 아무 도움이
+안 된다. 이제 브라우저에는 앱과 같은 모양의 화면 한 장을 준다.
+
+**전부 HTML로 바꾸지는 않았다.** `/api/*`는 앱 자신이 `fetch`로 부르고,
+가동 감시나 `curl`도 JSON을 기대한다. 그래서 요청이 무엇을 원하는지 보고
+고른다.
+
+| 요청 | 응답 |
+| --- | --- |
+| `Accept`에 `text/html`이 있고 `/api/*`가 아님 | HTML 화면 |
+| 그 외 (`*/*`, `application/json`, 헤더 없음) | `{"error":"not_found","statusCode":404}` |
+| `/api/*` | 브라우저가 물어도 항상 JSON |
+
+`curl`의 기본값이 `*/*`라는 점이 중요하다. 와일드카드를 HTML로 치면 스크립트와
+감시 도구가 전부 HTML을 받게 된다. 브라우저는 실제로 `text/html`을 앞에 적어
+보내므로 이 구분으로 충분하다.
+
+화면은 `Accept-Language`로 언어를 고른다. q값까지 본다 —
+`ko;q=0.1,en;q=0.9`면 영어다. **협상 규칙은 앱과 같은 함수**
+(`src/shared/negotiate.ts`)를 쓴다. 같은 방문자가 앱에서는 한국어를, 오류
+화면에서는 영어를 보게 되면 그게 더 이상하다. 문구만 서버에 따로 적어 두었다
+— 클라이언트 로케일은 100개가 넘는 키에 함수까지 든 브라우저용 모듈이라,
+서버가 그걸 import 하면 빌드가 뒤엉킨다.
+
+캐릭터도 나온다. `catch` 포즈를 매번 무작위로 고른다.
+
+세 가지를 지킨다.
+
+1. **내부 사정을 밝히지 않는다.** 화면에도 JSON에도 상태 코드뿐이다. 어떤
+   라우트가 왜 터졌는지는 로그에만 남는다. 5xx는 `error`로, 4xx는 `info`로
+   찍는다 — 잘못 만든 요청까지 error로 남기면 진짜 고장이 파묻힌다.
+2. **요청 경로를 되비추지 않는다.** Fastify 기본 404 메시지는 경로를 그대로
+   담는다. 그걸 HTML에 넣으면 그 자체로 XSS다. 지금은 아예 넣지 않고,
+   그래도 이스케이프 함수를 두고 테스트로 묶어 뒀다.
+3. **스크립트가 없다.** CSP가 `script-src 'self'`라 인라인은 실행되지 않고,
+   이 화면에 동작이 필요하지도 않다. 스타일은 앱과 같은 `/styles.css`를 쓰므로
+   대개 캐시에서 나오고 다크 모드가 저절로 따라온다.
+
+rate limit(429)도 같은 경로를 탄다. 브라우저로 들어온 사람은 화면을,
+스크립트는 `Retry-After`가 붙은 JSON을 받는다.
+
 ## 다국어
 
 현재 한국어 / English / 日本語 / 简体中文 / 繁體中文.
@@ -237,6 +281,9 @@ src/
     stats.ts      통계 응답 스키마 + 타입
     admin.ts      관리 API 스키마 + 타입
     challenge.ts  확인 절차 스키마 + 타입
+    automation.ts 자동화 흔적 이름 + User-Agent 규칙
+    characters.ts 캐릭터 수와 무작위 선택
+    negotiate.ts  BCP-47 언어 협상 (순수 함수)
   server/
     config.ts       환경변수 기반 설정 (부팅 시점 검증)
     device.ts       계절에 따른 기기 종류 판정과 이미지 경로 해석
@@ -249,6 +296,7 @@ src/
     thermostat.ts   공유 온도값. I/O 없는 순수 로직
     nickname.ts     신뢰할 수 없는 닉네임 입력 정규화
     client-ip.ts    rate limit 키가 될 클라이언트 주소 해석
+    error-page.ts   404/5xx 등을 사람이 읽는 화면으로
     state-store.ts  온도값 영속화 (디바운스 + 원자적 쓰기)
     realtime.ts     socket.io 이벤트 핸들러
     app.ts          Fastify + socket.io 조립 (listen 안 함)
@@ -263,15 +311,16 @@ src/
     theme.ts      라이트/다크 테마
     stats.ts      통계 화면(순위·최근 기록·활동 그래프)
     admin.ts      관리 화면
-    challenge.ts  작업증명 풀이, 캐릭터 선택
+    challenge.ts  작업증명 풀이
+    automation.ts 자동화 흔적 탐지 (순수 함수)
     compat.ts     브라우저 기능 확인
     main.ts       앱 본체 (compat 통과 시 동적 import)
-    i18n/         로케일 등록, BCP-47 협상, Locale 계약
+    i18n/         로케일 등록, Locale 계약
 public/
   index.html      마크업 (인라인 script/style 없음)
   admin.html      관리 화면
   robots.txt
-  img/            확인 화면 캐릭터 (png-8)
+  img/            확인 화면·오류 화면 캐릭터 (png-8)
 assets/img-src/   캐릭터 원본 PNG (gitignore, 서빙 안 함)
 deploy/           리버스 프록시 설정 예시
   styles.css
