@@ -14,17 +14,6 @@ import { type Challenge, challengeSchema, verifyResponseSchema } from "../shared
 
 const REPORT_EVERY = 2000;
 
-/** 확인 화면에 나오는 캐릭터 수. public/img/{scan,catch}_N.png */
-export const CHARACTER_COUNT = 3;
-
-/**
- * 방문마다 캐릭터 하나를 고른다. 탐색 중에는 scan, 막혔을 때는 catch 포즈라
- * 같은 캐릭터로 이어져야 한 사람이 쫓아온 것처럼 읽힌다.
- */
-export function pickCharacter(random: () => number = Math.random): number {
-  return 1 + Math.floor(random() * CHARACTER_COUNT);
-}
-
 const encoder = new TextEncoder();
 
 function meetsDifficulty(hash: Uint8Array, difficulty: number): boolean {

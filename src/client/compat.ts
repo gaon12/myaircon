@@ -1,4 +1,4 @@
-import { pickCharacter } from "./challenge.ts";
+import { pickCharacter } from "../shared/characters.ts";
 
 /**
  * 브라우저가 이 앱을 돌릴 수 있는지 확인한다.

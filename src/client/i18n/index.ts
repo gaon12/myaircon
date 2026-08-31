@@ -1,10 +1,10 @@
+import { negotiateLocale } from "../../shared/negotiate.ts";
 import type { Locale } from "./locale.ts";
 import en from "./locales/en.ts";
 import ja from "./locales/ja.ts";
 import ko from "./locales/ko.ts";
 import zhHans from "./locales/zh-Hans.ts";
 import zhHant from "./locales/zh-Hant.ts";
-import { negotiateLocale } from "./negotiate.ts";
 
 /**
  * 언어를 추가하려면 locales/ 아래에 파일 하나를 만들고 여기 한 줄을 더하면 된다.

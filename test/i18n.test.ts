@@ -9,7 +9,7 @@ import {
   pickLocale,
 } from "../src/client/i18n/index.ts";
 import type { PlainStringKey } from "../src/client/i18n/locale.ts";
-import { negotiateLocale, parseTag } from "../src/client/i18n/negotiate.ts";
+import { negotiateLocale, parseTag } from "../src/shared/negotiate.ts";
 
 const pick = (requested: unknown): string =>
   negotiateLocale(requested, localeCodes, FALLBACK_LOCALE);

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { afterEach, describe, it } from "node:test";
 import type { LightMyRequestResponse } from "fastify";
-import { CHARACTER_COUNT, pickCharacter } from "../src/client/challenge.ts";
 import { ChallengeIssuer, meetsDifficulty } from "../src/server/challenge.ts";
 import { Guard, type GuardOptions } from "../src/server/guard.ts";
+import { CHARACTER_COUNT, pickCharacter } from "../src/shared/characters.ts";
 import { once, startTestServer, type TestServer } from "./helpers.ts";
 
 const OPTIONS: GuardOptions = {

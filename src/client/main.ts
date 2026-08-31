@@ -1,3 +1,4 @@
+import { pickCharacter } from "../shared/characters.ts";
 import type {
   BlockedMessage,
   DeviceInfo,
@@ -8,7 +9,7 @@ import type {
 } from "../shared/protocol.ts";
 import type { RankPeriod } from "../shared/stats.ts";
 import { BrownNoise, gainForTemperature } from "./audio.ts";
-import { pickCharacter, runChallenge } from "./challenge.ts";
+import { runChallenge } from "./challenge.ts";
 import { requireElement } from "./dom.ts";
 import { type Locale, type LocaleCode, localeOptions, locales, pickLocale } from "./i18n/index.ts";
 import type { PlainStringKey } from "./i18n/locale.ts";
