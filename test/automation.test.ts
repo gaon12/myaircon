@@ -58,6 +58,25 @@ describe("브라우저에서 보는 자동화 흔적", () => {
     assert.deepEqual(found, ["selenium"]);
   });
 
+  it("요즘 ChromeDriver가 window에 심는 cdc_ 프로퍼티를 잡는다", () => {
+    // msedgedriver 152를 실제로 붙여서 받아 적은 이름들이다. `$`가 없고
+    // document가 아니라 window에 붙는다.
+    const windowKeys = [
+      "document",
+      "cdc_adoQpoasnfa76pfcZLmcfl_Array",
+      "cdc_adoQpoasnfa76pfcZLmcfl_Promise",
+      "cdc_adoQpoasnfa76pfcZLmcfl_Window",
+    ];
+    assert.deepEqual(detectFrom(scope({ windowKeys })), ["selenium"]);
+  });
+
+  it("cdc_로 시작하지 않는 이름은 잡지 않는다", () => {
+    // 접두사가 짧으므로 걸리는 범위를 못 박아 둔다.
+    for (const key of ["cdcPlayer", "mycdc_x", "wdcount", "cd", "$cd"]) {
+      assert.deepEqual(detectFrom(scope({ windowKeys: [key] })), [], key);
+    }
+  });
+
   it("<html webdriver> 속성을 잡는다", () => {
     assert.deepEqual(detectFrom(scope({ webdriverAttribute: true })), ["selenium"]);
   });

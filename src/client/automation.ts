@@ -12,7 +12,13 @@ export type BrowserScope = {
   readonly windowKeys: readonly string[];
   /** document 의 자체 프로퍼티 이름들. */
   readonly documentKeys: readonly string[];
-  /** <html webdriver> 속성이 붙어 있는지. ChromeDriver가 붙일 때가 있다. */
+  /**
+   * <html webdriver> 속성이 붙어 있는지.
+   *
+   * 구형 드라이버가 붙이던 것이다. msedgedriver 152로 확인해 보니 요즘은
+   * 붙지 않는다(html의 속성은 lang 하나뿐이었다). 비용이 없으므로 남겨 두되,
+   * 이것만 믿으면 안 된다.
+   */
   readonly webdriverAttribute: boolean;
 };
 
@@ -24,7 +30,22 @@ export type BrowserScope = {
  * 헤드리스 판별법은 일부러 뺐다. 모바일 사파리와 파이어폭스가 그대로
  * 걸린다 -- 진짜 사용자를 자동화로 모는 검사는 없느니만 못하다.
  */
+/**
+ * ChromeDriver가 심는 표식.
+ *
+ * 오래된 자료는 전부 "document에 붙는 $cdc_..." 라고 적고 있는데, 실제로
+ * 붙여 보니 아니었다. msedgedriver 152는 `$` 없이 **window**에 일곱 개를
+ * 심는다: cdc_adoQpoasnfa76pfcZLmcfl_{Array,Object,Promise,Proxy,Symbol,
+ * JSON,Window}. document에는 아무것도 없었다. 그래서 `$`를 선택적으로 두고
+ * 양쪽에서 본다.
+ *
+ * 가운데 22자는 빌드마다 다르므로 접두사만 본다. 접두사가 짧아 보이지만,
+ * 정상적인 페이지의 전역에 `cdc_`로 시작하는 이름이 있을 이유는 없다.
+ */
+const CHROMEDRIVER = /^\$?(cdc_|wdc_)/;
+
 const WINDOW_PATTERNS: ReadonlyArray<readonly [AutomationSignal, RegExp]> = [
+  ["selenium", CHROMEDRIVER],
   ["selenium", /^(_Selenium_IDE_Recorder|__selenium|__webdriver|__driver|__fxdriver)/],
   ["playwright", /^(__playwright|__pw_|__PW_)/],
   ["puppeteer", /^__puppeteer/],
@@ -32,8 +53,8 @@ const WINDOW_PATTERNS: ReadonlyArray<readonly [AutomationSignal, RegExp]> = [
 ];
 
 const DOCUMENT_PATTERNS: ReadonlyArray<readonly [AutomationSignal, RegExp]> = [
-  // ChromeDriver가 document에 심는 $cdc_asdjflasutopfhvcZLmcfl_ 계열.
-  ["selenium", /^(\$cdc_|\$wdc_|__selenium|__webdriver|__driver|__fxdriver)/],
+  ["selenium", CHROMEDRIVER],
+  ["selenium", /^(__selenium|__webdriver|__driver|__fxdriver)/],
 ];
 
 /** 주어진 관찰값에서 흔적을 뽑는다. 중복 없이, 선언 순서대로. */
