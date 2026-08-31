@@ -770,8 +770,15 @@ main {
   font-size: 1.2rem;
 }
 
+/* 이 화면을 보는 브라우저는 CSS 커스텀 프로퍼티도 모를 수 있다(IE11).
+   var()를 이해하지 못하면 선언 전체를 버리므로, 앞에 리터럴 색을 하나 둬서
+   그쪽이 남게 한다. 하필 IE를 위한 화면에서 IE가 못 읽는 문법만 쓰면
+   글자색이 통째로 빠진다. rem, vh, max-width는 IE11도 이해한다. */
 .legacy-notice p {
   margin: 6px 0;
+  color: #6b6b6b;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: 위 리터럴 색은 IE11용
+     폴백이다. 중복이 바로 이 규칙이 노리는 동작이라 지우면 안 된다. */
   color: var(--ink-soft);
   font-size: 0.85rem;
 }
