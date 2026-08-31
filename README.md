@@ -6,6 +6,8 @@ Web Audio API로 만든 브라운 노이즈가 온도에 따라 음량을 바꾼
 
 한국어 · English · 日本語 · 简体中文 · 繁體中文 · 라이트/다크 · 반응형 · 실시간 통계
 
+[![CI](https://github.com/gaon12/myaircon/actions/workflows/ci.yml/badge.svg)](https://github.com/gaon12/myaircon/actions/workflows/ci.yml)
+
 [codingapple1/myaircon.online](https://github.com/codingapple1/myaircon.online)의 fork다.
 원본은 서비스가 종료됐고, 이 저장소는 재오픈을 위해 런타임과 의존성을 최신으로
 올리고 알려진 버그를 정리한 버전이다.
@@ -164,10 +166,90 @@ pm2 등으로 띄우고 싶다면 전역에 설치해서 쓴다. 프로세스 �
 
 ```bash
 npm i -g pm2
-pm2 start npm --name myaircon -- start
+npm ci && npm run build
+pm2 start dist/server/server.js --name myaircon
+pm2 save
 ```
 
+> `pm2 start npm -- start` 로 띄우지 말 것. `start`에는 `prestart` 훅이
+> 걸려 있어서 pm2가 재시작할 때마다 `tsc`가 다시 돈다. 빌드는 배포할 때
+> 한 번만 하면 된다.
+
 `SIGTERM`/`SIGINT`를 받으면 열린 소켓을 정리하고 마지막 온도를 저장한 뒤 종료한다.
+
+### GitHub Actions (CI / CD)
+
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — push와 PR마다
+  `npm run ci`(Biome + 타입 검사 + 테스트)를 돌리고 빌드 산출물이 실제로
+  나왔는지 확인한다. 로컬과 같은 스크립트를 부르므로 "로컬에서는 되는데
+  CI에서 깨진다"가 생기지 않는다.
+- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) — `main`에
+  올라가면 CI를 다시 통과시킨 뒤 SSH로 서버에 들어가 배포한다.
+  실제 절차는 [`deploy/remote-deploy.sh`](deploy/remote-deploy.sh)에 있다.
+
+배포는 이 순서다.
+
+```
+git fetch && git reset --hard <sha>   # pull이 아니다 (아래 참고)
+npm ci --ignore-scripts
+npm run build
+pm2 reload <name>   (없으면 start)
+curl /healthz       실패하면 이전 커밋으로 되돌린다
+```
+
+**`git pull`이 아니라 `reset --hard`인 이유.** pull은 서버에 손댄 파일이
+남아 있으면 멈추고, 최악의 경우 머지 커밋을 만든다. 배포된 서버의 작업
+트리는 커밋 하나를 그대로 비추기만 하면 된다. `git clean`도 함께 돌리되
+`data/`(공유 온도·통계·차단 목록)와 `node_modules/`는 남긴다.
+
+**health check가 통과해야 성공이다.** pm2가 "떴다"고 말하는 것과 서버가
+실제로 응답하는 것은 다르다. `/healthz`가 40초 안에 답하지 않으면 이전
+커밋으로 되돌리고 pm2 로그 50줄을 남긴 뒤 실패로 끝낸다.
+
+#### 준비 (한 번만)
+
+서버에서:
+
+```bash
+sudo mkdir -p /srv/myaircon && sudo chown "$USER" /srv/myaircon
+git clone https://github.com/gaon12/myaircon /srv/myaircon
+cd /srv/myaircon && npm ci && npm run build
+pm2 start dist/server/server.js --name myaircon && pm2 save && pm2 startup
+```
+
+배포 전용 SSH 키를 만들고 공개키를 서버의 `~/.ssh/authorized_keys`에 넣는다.
+
+```bash
+ssh-keygen -t ed25519 -C myaircon-deploy -f ~/.ssh/myaircon-deploy -N ""
+ssh-keyscan -p 22 <서버주소>          # 아래 SSH_KNOWN_HOSTS에 넣을 값
+```
+
+리포지토리 **Secrets**:
+
+| 이름 | 값 |
+| --- | --- |
+| `SSH_HOST` | 서버 주소 |
+| `SSH_USER` | 접속 계정 |
+| `SSH_KEY` | 위에서 만든 **개인키** 전문 |
+| `SSH_KNOWN_HOSTS` | `ssh-keyscan` 출력 |
+
+리포지토리 **Variables** (전부 선택, 괄호 안이 기본값):
+
+| 이름 | 기본값 |
+| --- | --- |
+| `SSH_PORT` | `22` |
+| `DEPLOY_PATH` | `/srv/myaircon` |
+| `PM2_NAME` | `myaircon` |
+| `HEALTH_URL` | `http://127.0.0.1:8080/healthz` |
+
+> **`SSH_KNOWN_HOSTS`를 비워 두지 말 것.** 흔히 쓰는 방법이 러너에서
+> `ssh-keyscan`을 즉석에서 돌리는 것인데, 그건 처음 만난 키를 무조건 믿는
+> 것이라 중간자에게 그대로 배포해 버릴 수 있다. 그래서 이 워크플로는
+> 값이 없으면 아예 시작하지 않는다.
+
+배포 절차 자체가 리포지토리 안에 있으므로, 롤백하면 배포 방식도 함께
+돌아간다. 서버에 스크립트를 따로 깔아 둘 필요도 없다 -- ssh의 stdin으로
+흘려보낸다.
 
 ### HTTP 엔드포인트
 

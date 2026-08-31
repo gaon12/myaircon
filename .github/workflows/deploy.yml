@@ -1,0 +1,69 @@
+# main에 올라간 것을 VPS로 배포한다. (pm2 + SSH)
+#
+# 먼저 CI를 그대로 다시 돌리고, 통과했을 때만 서버에 손을 댄다. push 이벤트의
+# CI 결과를 믿고 건너뛸 수도 있지만, 그러면 workflow_dispatch로 눌렀을 때
+# 검사 없이 나가게 된다.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 배포는 절대 겹치면 안 된다. 두 개가 동시에 git reset과 pm2 reload를 하면
+# 무엇이 떠 있는지 아무도 모르게 된다. 돌고 있는 것을 취소하지도 않는다 --
+# 중간에 끊긴 배포가 가장 나쁘다.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    # 리포지토리 Settings > Environments 에서 승인자나 배포 브랜치 제한을
+    # 걸 수 있다. 시크릿도 이 환경에 묶어 두는 편이 안전하다.
+    environment: production
+
+    steps:
+      - name: SSH 준비
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_KEY}" ] || [ -z "${SSH_KNOWN_HOSTS}" ]; then
+            echo "::error::SSH_KEY와 SSH_KNOWN_HOSTS 시크릿이 필요합니다. README의 '배포' 절 참고." >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # ssh-keyscan을 러너에서 즉석으로 돌리지 않는다. 그건 상대가
+          # 누구든 처음 만난 키를 그대로 믿는 것이라, 중간자에게 그대로
+          # 배포해 버릴 수 있다. 호스트 키는 시크릿으로 못 박는다.
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: 배포
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/myaircon' }}
+          PM2_NAME: ${{ vars.PM2_NAME || 'myaircon' }}
+          HEALTH_URL: ${{ vars.HEALTH_URL || 'http://127.0.0.1:8080/healthz' }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy -p "${SSH_PORT}" -o BatchMode=yes \
+            "${SSH_USER}@${SSH_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' PM2_NAME='${PM2_NAME}' HEALTH_URL='${HEALTH_URL}' SHA='${SHA}' bash -seu" \
+            < deploy/remote-deploy.sh

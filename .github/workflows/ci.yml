@@ -1,0 +1,50 @@
+# 린트 + 타입 검사 + 테스트.
+#
+# 로컬의 `npm run ci`와 같은 것을 돌린다. 명령을 여기서 풀어 적지 않고
+# 스크립트 하나를 부르는 이유는, 그래야 "로컬에서는 되는데 CI에서 깨진다"가
+# 생기지 않기 때문이다. 검사를 추가할 일이 있으면 package.json만 고친다.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # 배포 워크플로가 이 검사를 재사용한다.
+  workflow_call:
+
+# 같은 브랜치에 새 커밋이 올라오면 돌던 것을 취소한다. 어차피 볼 것은
+# 마지막 상태다. 단 main은 취소하지 않는다 -- 배포가 물려 있다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # package.json의 engines가 >=24다. 여기서만 24를 따로 적으면
+          # 두 곳이 어긋나므로 파일에서 읽는다.
+          node-version-file: package.json
+          cache: npm
+
+      # prepare 훅이 install 중에 빌드를 돌린다. --ignore-scripts로 막아
+      # 두면 install 실패와 빌드 실패가 로그에서 섞이지 않는다.
+      - run: npm ci --ignore-scripts
+
+      - run: npm run build
+
+      - run: npm run ci
+
+      # 클라이언트는 번들러 없이 tsc 산출물을 그대로 서빙한다. 빌드가
+      # 조용히 아무것도 안 뱉는 경우를 잡는다.
+      - name: 빌드 산출물 확인
+        run: |
+          test -f dist/server/server.js
+          test -f public/js/client/app.js
