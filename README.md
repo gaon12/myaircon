@@ -61,7 +61,8 @@ npm run dev
 ## 설정
 
 모든 설정은 환경변수로 하며 전부 선택 사항이다. 전체 목록과 기본값은
-[`.env.example`](.env.example)에 있고, 검증 로직은 [`src/config.js`](src/config.js)에 있다.
+[`.env.example`](.env.example)에 있고, 검증 로직은
+[`src/server/config.ts`](src/server/config.ts)에 있다.
 잘못된 값은 부팅 시점에 바로 에러가 난다.
 
 자주 쓰는 것만:
@@ -240,10 +241,13 @@ rate limit(429)도 같은 경로를 탄다. 브라우저로 들어온 사람은 
 
 ### 언어 추가하기
 
-1. `public/js/i18n/locales/<code>.js`를 만든다. 기존 파일 하나를 복사해서
+1. `src/client/i18n/locales/<code>.ts`를 만든다. 기존 파일 하나를 복사해서
    값만 바꾸는 것이 가장 빠르다.
-2. `public/js/i18n/index.js`의 `locales`에 한 줄 추가한다. 여기 나열한 순서가
+2. `src/client/i18n/index.ts`의 `locales`에 한 줄 추가한다. 여기 나열한 순서가
    곧 선택 목록의 순서다.
+
+> 고칠 곳은 `src/`다. `public/js/`는 `tsc`가 뱉는 산출물이라 gitignore 되어
+> 있고 다음 빌드에 통째로 덮인다.
 
 각 로케일 파일은 `satisfies Locale`로 계약을 검사받는다. 키를 빠뜨리면 화면에
 `undefined`가 뜨는 대신 **컴파일이 실패**한다. `npm test`도 같은 것을 확인한다
@@ -673,9 +677,12 @@ UA만 보고 HTTP를 거절하면 가동 감시나 링크 미리보기가 조용
   트리에서 나오므로 버전이 어긋날 수 없다.
 - **CSP**에 `unsafe-inline`도 외부 출처도 없다
   (`default-src 'self'`). 그래서 인라인 `<script>`/`<style>`을 쓸 수 없다 —
-  스타일은 `public/styles.css`, 스크립트는 `public/js/`에 둘 것.
+  스타일은 `public/styles.css`에, 스크립트는 `src/client/`에 둘 것
+  (`tsc`가 `public/js/`로 뱉고 그 경로를 서빙한다).
 - 닉네임은 서버에서 정규화한다: 타입 검사, 제어문자·bidi override 제거,
-  NFC 정규화, grapheme 단위 절단.
+  NFC 정규화, **허용 문자만 남기기**(한글·영문·숫자·가나·한자), grapheme
+  단위 절단. 클라이언트도 입력 중에 같은 규칙으로 거르지만
+  (`src/shared/nickname-charset.ts`를 공유한다) 진짜 방어는 서버 쪽이다.
 - 그 외 `nosniff`, `Referrer-Policy`, `X-Frame-Options`, COOP, `Permissions-Policy`.
 
 ## 테스트
