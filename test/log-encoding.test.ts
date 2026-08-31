@@ -34,7 +34,20 @@ const assertAscii = (text: string, label: string): void => {
 describe("서버 진단 출력은 ASCII만 쓴다", () => {
   describe("소스에 한글 진단 문자열이 남아 있지 않다", () => {
     /** 사용자에게 보이는 값이라 한글이 정당한 곳. */
-    const USER_FACING = new Set(["NICKNAME_FALLBACK 기본값"]);
+    const USER_FACING = new Set(["NICKNAME_FALLBACK 기본값", "error-page.ts 오류 화면 문구"]);
+
+    /**
+     * 통째로 예외인 파일.
+     *
+     * error-page.ts는 브라우저에 내보낼 HTML을 만드는 곳이라 문구가 다섯 개
+     * 언어로 들어 있다. 이건 로그가 아니라 화면이고, UTF-8로 선언한 HTML을
+     * 브라우저가 읽으므로 콘솔 인코딩과 아무 상관이 없다. 클라이언트
+     * 로케일이 이 검사 대상이 아닌 것과 같은 이유다.
+     *
+     * 대신 아래에서 "이 파일은 로그를 찍지 않는다"를 함께 확인한다. 그
+     * 조건이 깨지면 예외가 몰래 넓어진 것이므로 다시 들여다봐야 한다.
+     */
+    const EXEMPT_FILES = new Set(["src/server/error-page.ts"]);
 
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const entry of readdirSync(dir)) {
@@ -53,7 +66,9 @@ describe("서버 진단 출력은 ASCII만 쓴다", () => {
     ];
 
     for (const file of files) {
-      it(path.relative(root, file).replaceAll("\\", "/"), () => {
+      const relative = path.relative(root, file).replaceAll("\\", "/");
+      if (EXEMPT_FILES.has(relative)) continue;
+      it(relative, () => {
         const offenders: string[] = [];
         readFileSync(file, "utf8")
           .split("\n")
@@ -72,7 +87,17 @@ describe("서버 진단 출력은 ASCII만 쓴다", () => {
     }
 
     it("예외 목록이 의도한 것만 담고 있다", () => {
-      assert.equal(USER_FACING.size, 1);
+      assert.equal(USER_FACING.size, 2);
+      assert.deepEqual([...EXEMPT_FILES], ["src/server/error-page.ts"]);
+    });
+
+    it("통째로 예외인 파일은 로그를 찍지 않는다", () => {
+      // 화면 문구라서 봐준 것이지, 그 파일 안에서 한글로 로그를 남겨도 된다는
+      // 뜻이 아니다. 로깅이 들어오는 순간 예외의 근거가 사라진다.
+      for (const relative of EXEMPT_FILES) {
+        const source = readFileSync(path.join(root, relative), "utf8");
+        assert.doesNotMatch(source, /\b(log|logger|console)\s*\.\s*\w/, relative);
+      }
     });
   });
 

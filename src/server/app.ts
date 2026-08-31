@@ -1,7 +1,12 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import fastifyStatic from "@fastify/static";
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+  type FastifyServerOptions,
+} from "fastify";
 import { Server as SocketIOServer } from "socket.io";
 import { signalsFromUserAgent } from "../shared/automation.ts";
 import { verifyRequestSchema } from "../shared/challenge.ts";
@@ -11,6 +16,7 @@ import { BanStore } from "./ban-store.ts";
 import { ChallengeIssuer } from "./challenge.ts";
 import { resolveClientIp } from "./client-ip.ts";
 import { type AppConfig, config as defaultConfig } from "./config.ts";
+import { renderErrorPage, wantsHtml } from "./error-page.ts";
 import { Guard } from "./guard.ts";
 import { createIdentityTagger, generateIdentitySecret } from "./identity.ts";
 import { type AppSocketServer, type RealtimeHandle, registerRealtime } from "./realtime.ts";
@@ -36,6 +42,54 @@ function makeClientIpOf(config: AppConfig) {
       { address: request.ip, headers: request.headers },
       { trustProxyHops: config.trustProxyHops },
     );
+}
+
+/**
+ * 던져진 것에서 HTTP 상태를 읽는다.
+ *
+ * Fastify는 FastifyError를 준다고 하지만, 라우트가 무엇을 던질지는 알 수 없다.
+ * 문자열이든 null이든 여기까지 올 수 있으므로 아무 가정도 하지 않고, 쓸 만한
+ * 4xx/5xx가 붙어 있을 때만 그것을 쓴다.
+ */
+function statusOf(error: unknown): number {
+  const value: unknown =
+    typeof error === "object" && error !== null && "statusCode" in error
+      ? (error as { statusCode: unknown }).statusCode
+      : undefined;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 400 && value <= 599) {
+    return value;
+  }
+  return 500;
+}
+
+/** 상태 코드마다 JSON 쪽에 쓸 짧은 이름. 화면 문구와 달리 번역하지 않는다. */
+function errorCode(status: number): string {
+  if (status === 404) return "not_found";
+  if (status === 429) return "too_many_requests";
+  if (status >= 500) return "internal_error";
+  return "bad_request";
+}
+
+/**
+ * 오류 하나를 요청이 원하는 형식으로 내보낸다.
+ *
+ * 브라우저면 화면 한 장, 그 외에는 JSON이다. 어느 쪽이든 상태 코드 말고는
+ * 아무것도 밝히지 않는다 -- 어떤 라우트가 왜 터졌는지는 로그에 남긴다.
+ */
+async function sendError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  status: number,
+): Promise<void> {
+  reply.code(status);
+  if (wantsHtml({ url: request.url, accept: request.headers.accept })) {
+    reply.type("text/html; charset=utf-8");
+    await reply.send(
+      renderErrorPage({ status, acceptLanguage: request.headers["accept-language"] }),
+    );
+    return;
+  }
+  await reply.send({ error: errorCode(status), statusCode: status });
 }
 
 export type BuildAppOptions = {
@@ -167,7 +221,8 @@ export async function buildApp({
 
       if (await guard.allowHttpRequest(ip)) return;
       reply.header("Retry-After", "60");
-      await reply.code(429).send({ error: "too_many_requests" });
+      // 브라우저로 들어온 사람에게는 JSON 대신 화면을 보여준다.
+      await sendError(request, reply, 429);
     });
   }
 
@@ -251,6 +306,20 @@ export async function buildApp({
     // 짧게 캐시할 수 있도록 클라이언트에 캐시 힌트를 준다.
     reply.header("Cache-Control", "no-store");
     return stats.snapshot(realtime.online);
+  });
+
+  // 오류 응답. 라우트를 전부 등록한 뒤에 붙인다.
+  app.setNotFoundHandler(async (request, reply) => sendError(request, reply, 404));
+
+  app.setErrorHandler(async (error, request, reply) => {
+    const status = statusOf(error);
+
+    // 5xx만 error로 남긴다. 4xx는 대개 잘못 만든 요청이고, 그것까지 같은
+    // 수준으로 찍으면 진짜 고장이 파묻힌다.
+    if (status >= 500) request.log.error({ err: error, url: request.url }, "request failed");
+    else request.log.info({ err: error, url: request.url, status }, "request rejected");
+
+    return sendError(request, reply, status);
   });
 
   return { app, io, thermostat, store, stats, config, realtime, bans, guard, challenge };
