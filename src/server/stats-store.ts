@@ -98,6 +98,8 @@ export class StatsStore {
   #todayKey: string;
   #hourly = new Map<number, HourBucket>();
   #recent: RecentEntry[] = [];
+  /** 아직 디스크에 쓰지 않은 기록. flush에서 append-only로 넣는다. */
+  #unsavedRecent: RecentEntry[] = [];
   #dirty = false;
   #timer: NodeJS.Timeout | null = null;
 
@@ -130,6 +132,15 @@ export class StatsStore {
         "CREATE TABLE IF NOT EXISTS hourly (" +
           "hour INTEGER PRIMARY KEY, changes INTEGER NOT NULL, temp_sum INTEGER NOT NULL, " +
           "temp_min INTEGER NOT NULL, temp_max INTEGER NOT NULL)",
+      );
+      // 서버가 재시작해도 유지돼야 하는 작은 값들(예: 표시 태그용 비밀키).
+      this.#db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+      // 최근 기록. 재시작 후에도 남아야 배포할 때마다 빈 화면이 되지 않는다.
+      // 매번 전체를 다시 쓰지 않고 새로 생긴 것만 append 하고 오래된 것을 지운다.
+      this.#db.exec(
+        "CREATE TABLE IF NOT EXISTS recent (" +
+          "id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, " +
+          "username TEXT NOT NULL, direction TEXT NOT NULL, temp INTEGER NOT NULL)",
       );
       this.#load();
     } catch (err) {
@@ -180,8 +191,23 @@ export class StatsStore {
       });
     }
 
+    const recent = db
+      .prepare("SELECT at, username, direction, temp FROM recent ORDER BY id DESC LIMIT ?")
+      .all(this.#recentSize) as unknown as RecentEntry[];
+    // node:sqlite는 프로토타입이 없는 객체를 돌려준다. 그대로 두면 API 응답까지
+    // 흘러가므로 평범한 객체로 바꿔 담는다. 조회는 최신순이지만 링버퍼는
+    // 오래된 것이 앞에 온다.
+    this.#recent = recent
+      .map((row) => ({
+        at: row.at,
+        username: row.username,
+        direction: row.direction,
+        temp: row.temp,
+      }))
+      .reverse();
+
     this.#logger.info?.(
-      { names: this.#allTime.size, hours: this.#hourly.size },
+      { names: this.#allTime.size, hours: this.#hourly.size, recent: this.#recent.length },
       "loaded persisted statistics",
     );
   }
@@ -222,12 +248,14 @@ export class StatsStore {
       bucket.max = Math.max(bucket.max, change.temp);
     }
 
-    this.#recent.push({
+    const entry: RecentEntry = {
       at,
       username: change.username,
       direction: change.direction,
       temp: change.temp,
-    });
+    };
+    this.#recent.push(entry);
+    this.#unsavedRecent.push(entry);
     if (this.#recent.length > this.#recentSize) this.#recent.shift();
 
     this.#dirty = true;
@@ -241,6 +269,35 @@ export class StatsStore {
     const kept = topEntries(counts, KEEP_NAMES);
     counts.clear();
     for (const entry of kept) counts.set(entry.username, entry.count);
+  }
+
+  /**
+   * 재시작해도 유지돼야 하는 작은 값을 읽는다.
+   * 통계가 꺼져 있거나 DB를 못 열었으면 null.
+   */
+  getMeta(key: string): string | null {
+    const db = this.#db;
+    if (db === null) return null;
+    try {
+      const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
+        | { value: string }
+        | undefined;
+      return row?.value ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  setMeta(key: string, value: string): void {
+    const db = this.#db;
+    if (db === null) return;
+    try {
+      db.prepare(
+        "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ).run(key, value);
+    } catch (err) {
+      this.#logger.warn?.({ err, key }, "failed to persist metadata");
+    }
   }
 
   /** 화면에 보여줄 스냅샷. 전부 메모리에서 만든다. */
@@ -289,7 +346,18 @@ export class StatsStore {
           "temp_sum = excluded.temp_sum, temp_min = excluded.temp_min, temp_max = excluded.temp_max",
       );
 
+      const insertRecent = db.prepare(
+        "INSERT INTO recent (at, username, direction, temp) VALUES (?, ?, ?, ?)",
+      );
+
       db.exec("BEGIN");
+      // 새로 생긴 것만 넣는다. 500건을 5초마다 다시 쓰는 것이 아니라
+      // 그 사이에 실제로 일어난 몇 건만 append 한다.
+      for (const entry of this.#unsavedRecent) {
+        insertRecent.run(entry.at, entry.username, entry.direction, entry.temp);
+      }
+      this.#unsavedRecent = [];
+
       const todayPeriod = `day:${this.#todayKey}`;
       for (const [username, count] of this.#today) upsertTally.run(todayPeriod, username, count);
       for (const [username, count] of this.#allTime) upsertTally.run("allTime", username, count);
@@ -328,6 +396,11 @@ export class StatsStore {
       "DELETE FROM tally WHERE period = 'allTime' AND username NOT IN " +
         "(SELECT username FROM tally WHERE period = 'allTime' ORDER BY count DESC LIMIT ?)",
     ).run(KEEP_NAMES);
+
+    // 링버퍼와 같은 크기만 남긴다.
+    db.prepare(
+      "DELETE FROM recent WHERE id NOT IN (SELECT id FROM recent ORDER BY id DESC LIMIT ?)",
+    ).run(this.#recentSize);
   }
 
   close(): void {

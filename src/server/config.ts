@@ -118,6 +118,8 @@ export type AppConfig = {
   nickname: { maxLength: number; fallback: string };
   rateLimit: { points: number; durationSeconds: number; blockSeconds: number };
   trustProxyHops: number;
+  /** 표시용 태그를 만들 비밀키. null이면 통계 DB에 저장된 값을 쓰거나 새로 만든다. */
+  identitySecret: string | null;
   maxHttpBufferSize: number;
   security: { contentSecurityPolicy: string; hstsMaxAge: number };
 };
@@ -185,6 +187,16 @@ export const config: AppConfig = {
   // 2단이면 2로 설정한다. 이 값을 넘기지 않으면 클라이언트가 헤더를 위조해
   // rate limit을 무력화할 수 있으므로 기본을 0으로 두는 것이 중요하다.
   trustProxyHops: readInt("TRUST_PROXY_HOPS", 0, { min: 0, max: 10 }),
+
+  // 접속자를 화면에서 구분하는 태그(가온#7c2)를 만들 때 쓴다. 비워두면 서버가
+  // 한 번 만들어 통계 DB에 저장하고 이후 재사용한다. 인스턴스를 여러 개
+  // 띄운다면 같은 값을 명시해야 태그가 서로 일치한다.
+  identitySecret: (() => {
+    const raw = readString("IDENTITY_SECRET", "");
+    if (raw === "") return null;
+    if (raw.length < 16) throw new Error("env IDENTITY_SECRET must be at least 16 characters");
+    return raw;
+  })(),
 
   // socket.io 페이로드는 닉네임 문자열 하나뿐이라 1KB면 충분하다.
   // 기본값 1MB를 그대로 두면 메모리 낭비/남용 여지가 생긴다.

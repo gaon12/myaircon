@@ -10,6 +10,7 @@ import type {
 import { resolveClientIp } from "./client-ip.ts";
 import type { AppConfig } from "./config.ts";
 import { describeDevice } from "./device.ts";
+import type { IdentityTagger } from "./identity.ts";
 import { normalizeNickname } from "./nickname.ts";
 import type { StatsStore } from "./stats-store.ts";
 import type { Thermostat } from "./thermostat.ts";
@@ -25,6 +26,8 @@ export type RealtimeDeps = {
   config: AppConfig;
   logger: RealtimeLogger;
   stats?: StatsStore | undefined;
+  /** 닉네임에 붙일 표시 태그를 만든다. 없으면 이름만 쓴다. */
+  tagger?: IdentityTagger | undefined;
   onChange?: ((temp: number) => void) | undefined;
 };
 
@@ -40,7 +43,7 @@ export type AppSocketServer = SocketIOServer<ClientToServerEvents, ServerToClien
 /** socket.io 이벤트 핸들러를 등록한다. */
 export function registerRealtime(
   io: AppSocketServer,
-  { thermostat, config, logger, stats, onChange }: RealtimeDeps,
+  { thermostat, config, logger, stats, tagger, onChange }: RealtimeDeps,
 ): RealtimeHandle {
   const limiter = new RateLimiterMemory({
     points: config.rateLimit.points,
@@ -121,7 +124,10 @@ export function registerRealtime(
       //    기존 코드는 `arg.substring(0, 9)`를 rate limit과 같은 try 안에
       //    두는 바람에, 숫자나 null을 보내면 TypeError가 catch에 삼켜져
       //    사용자에게 "너무 잦은 요청"이라는 엉뚱한 안내가 나갔다.
-      const username = normalizeNickname(rawNickname, config.nickname);
+      // 같은 이름을 쓰는 사람이 여럿일 수 있으므로 접속 주소에서 유도한 태그를
+      // 붙여 구분한다. 클라이언트가 위조할 수 없는 값이다.
+      const nickname = normalizeNickname(rawNickname, config.nickname);
+      const username = tagger === undefined ? nickname : tagger.label(nickname, clientIp);
 
       // 2) rate limit. 한도 초과는 RateLimiterRes(Error가 아님)로, 스토어
       //    장애는 진짜 Error로 reject된다. 둘을 구분해야 장애를 트래픽 탓으로

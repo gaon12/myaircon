@@ -5,6 +5,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import { Server as SocketIOServer } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/protocol.ts";
 import { type AppConfig, config as defaultConfig } from "./config.ts";
+import { createIdentityTagger, generateIdentitySecret } from "./identity.ts";
 import { type AppSocketServer, type RealtimeHandle, registerRealtime } from "./realtime.ts";
 import { StateStore } from "./state-store.ts";
 import { StatsStore } from "./stats-store.ts";
@@ -76,6 +77,11 @@ export async function buildApp({
     logger: app.log,
   });
 
+  // 표시용 태그의 비밀키. 재시작해도 같은 사람이 같은 태그를 받아야 하므로
+  // 한 번 만들어 저장해 두고 다음 부팅부터 재사용한다.
+  const identitySecret = resolveIdentitySecret(config, stats, app.log);
+  const tagger = createIdentityTagger(identitySecret);
+
   const saved = await store.load();
   if (saved !== null) {
     const restored = thermostat.restore(saved.temp);
@@ -141,6 +147,7 @@ export async function buildApp({
     config,
     logger: app.log,
     stats,
+    tagger,
     onChange: (temp) => store.schedule({ temp }),
   });
 
@@ -164,6 +171,31 @@ export async function buildApp({
   });
 
   return { app, io, thermostat, store, stats, config, realtime };
+}
+
+/**
+ * 표시 태그용 비밀키를 정한다.
+ *   1. 환경변수 IDENTITY_SECRET
+ *   2. 통계 DB에 저장된 값
+ *   3. 새로 만들어 저장 (다음 부팅부터 2번 경로)
+ * 통계를 꺼두면 저장할 곳이 없어 매 부팅 새 키가 되고, 그러면 태그도 바뀐다.
+ */
+function resolveIdentitySecret(
+  config: AppConfig,
+  stats: StatsStore,
+  logger: FastifyInstance["log"],
+): string {
+  if (config.identitySecret !== null) return config.identitySecret;
+
+  const stored = stats.getMeta("identitySecret");
+  if (stored !== null) return stored;
+
+  const generated = generateIdentitySecret();
+  stats.setMeta("identitySecret", generated);
+  if (stats.getMeta("identitySecret") === null) {
+    logger.warn("identity secret could not be persisted; display tags will change on restart");
+  }
+  return generated;
 }
 
 /**

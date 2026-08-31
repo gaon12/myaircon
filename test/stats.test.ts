@@ -211,15 +211,62 @@ describe("StatsStore", () => {
       second.close();
     });
 
-    it("재시작하면 최근 기록은 비어 있다 (메모리 링버퍼)", () => {
+    it("재시작해도 최근 기록이 남는다", () => {
+      // 배포할 때마다 "최근 기록"이 비어 보이는 것을 없애기 위한 것.
       const file = path.join(dir, "stats.db");
       const first = new StatsStore({ file, logger: silent, flushIntervalMs: 300_000 });
-      first.record({ username: "가온", direction: "up", temp: 20 });
+      first.record({ username: "가온", direction: "up", temp: 20, at: 1000 });
+      first.record({ username: "apple", direction: "down", temp: 19, at: 2000 });
       first.close();
 
       const second = new StatsStore({ file, logger: silent, flushIntervalMs: 300_000 });
-      assert.deepEqual(second.snapshot(0).recent, []);
+      const recent = second.snapshot(0).recent;
+      assert.equal(recent.length, 2);
+      // 최신이 앞에 온다
+      assert.deepEqual(recent[0], { at: 2000, username: "apple", direction: "down", temp: 19 });
+      assert.deepEqual(recent[1], { at: 1000, username: "가온", direction: "up", temp: 20 });
       second.close();
+    });
+
+    it("저장된 최근 기록도 링버퍼 크기를 넘지 않는다", () => {
+      const file = path.join(dir, "stats.db");
+      const first = new StatsStore({
+        file,
+        logger: silent,
+        recentSize: 5,
+        flushIntervalMs: 300_000,
+      });
+      for (let i = 0; i < 40; i++) {
+        first.record({ username: `u${i}`, direction: "up", temp: 20, at: 1000 + i });
+      }
+      first.close();
+
+      const second = new StatsStore({
+        file,
+        logger: silent,
+        recentSize: 5,
+        flushIntervalMs: 300_000,
+      });
+      const recent = second.snapshot(0).recent;
+      assert.equal(recent.length, 5);
+      assert.equal(recent[0]?.username, "u39");
+      second.close();
+    });
+
+    it("여러 번 flush 해도 같은 기록이 중복 저장되지 않는다", () => {
+      // append-only라 이미 쓴 것을 다시 쓰면 안 된다.
+      const file = path.join(dir, "stats.db");
+      const store = new StatsStore({ file, logger: silent, flushIntervalMs: 300_000 });
+      store.record({ username: "가온", direction: "up", temp: 20, at: 1000 });
+      store.flush();
+      store.record({ username: "가온", direction: "up", temp: 21, at: 2000 });
+      store.flush();
+      store.flush();
+      store.close();
+
+      const reopened = new StatsStore({ file, logger: silent, flushIntervalMs: 300_000 });
+      assert.equal(reopened.snapshot(0).recent.length, 2);
+      reopened.close();
     });
 
     it("시간대별 롤업도 남는다", () => {
@@ -271,7 +318,10 @@ describe("통계 API와 접속자 수", () => {
     await once(socket, "tempChange");
 
     const snap = (await server.app.inject({ method: "GET", url: "/api/stats" })).json();
-    assert.deepEqual(snap.today, [{ username: "가온", count: 1 }]);
+    // 표시 이름은 "가온#태그" 형태다(동명이인 구분).
+    assert.equal(snap.today.length, 1);
+    assert.match(snap.today[0].username, /^가온#[0-9a-f]{3}$/);
+    assert.equal(snap.today[0].count, 1);
     assert.equal(snap.recent.length, 1);
     assert.equal(snap.recent[0].direction, "up");
     assert.equal(snap.recent[0].temp, 19);

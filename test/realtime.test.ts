@@ -4,6 +4,13 @@ import type { LightMyRequestResponse } from "fastify";
 import type { BlockedMessage, TempChangeMessage } from "../src/shared/protocol.ts";
 import { once, race, startTestServer, type TestServer } from "./helpers.ts";
 
+/**
+ * 표시 이름은 "이름#태그" 형태다. 태그는 접속 주소에서 유도되므로 테스트가
+ * 특정 값에 기대면 안 된다. 이름 부분만 비교한다.
+ */
+const nameOf = (display: string): string => display.split("#")[0] ?? display;
+const TAG = /#[0-9a-f]{3}$/;
+
 describe("실시간 온도 조절", () => {
   let server: TestServer | undefined;
 
@@ -84,7 +91,8 @@ describe("실시간 온도 조절", () => {
     ]);
 
     assert.equal(seenByA.temp, 19);
-    assert.equal(seenByA.username, "가온");
+    assert.equal(nameOf(seenByA.username), "가온");
+    assert.match(seenByA.username, TAG, "동명이인 구분용 태그가 붙어야 한다");
     assert.equal(seenByA.changed, true);
     assert.equal(seenByA.direction, "up");
     // 누른 사람뿐 아니라 보고만 있는 사람에게도 똑같이 간다
@@ -126,7 +134,7 @@ describe("실시간 온도 조절", () => {
         ]);
 
         assert.equal(event, "tempChange", "rate limit이나 에러로 오해받으면 안 된다");
-        assert.equal(data.username, "익명");
+        assert.equal(nameOf(data.username), "익명");
         assert.equal(data.temp, 19);
       });
     }
@@ -142,7 +150,7 @@ describe("실시간 온도 조절", () => {
       "server-error",
     ]);
     assert.equal(event, "tempChange");
-    assert.equal(data.username, "익명");
+    assert.equal(nameOf(data.username), "익명");
   });
 
   it("이모지 닉네임이 깨지지 않고 잘린다", async () => {
@@ -159,7 +167,7 @@ describe("실시간 온도 조절", () => {
     const { socket } = await server.connect();
     socket.emit("minus", "   ");
     const { username } = await once<TempChangeMessage>(socket, "tempChange");
-    assert.equal(username, "익명");
+    assert.equal(nameOf(username), "익명");
   });
 
   describe("rate limit", () => {
