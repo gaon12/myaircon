@@ -10,6 +10,10 @@ export default {
   nicknameLabel: "Nickname",
   nicknamePlaceholder: "nickname (optional)",
   start: "Start",
+  save: "Save",
+  cancel: "Cancel",
+  rename: "Change name",
+  nicknameInvalid: "Letters, digits, Hangul, kana and Han characters only",
 
   onlineOn: "Online mode is on",
   onlineOff: "Online mode is off",
@@ -31,6 +35,7 @@ export default {
 
   stats: "Stats",
   about: "About",
+  repository: "GitHub repository",
   close: "Close",
   plusCount: "+ pressed",
   minusCount: "- pressed",

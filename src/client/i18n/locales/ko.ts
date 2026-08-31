@@ -9,6 +9,10 @@ export default {
   nicknameLabel: "닉네임",
   nicknamePlaceholder: "닉네임 (선택)",
   start: "시작",
+  save: "저장",
+  cancel: "취소",
+  rename: "이름 바꾸기",
+  nicknameInvalid: "한글, 영문, 숫자, 가나, 한자만 쓸 수 있습니다",
 
   onlineOn: "온라인 모드 켜짐",
   onlineOff: "온라인 모드 꺼짐",
@@ -30,6 +34,7 @@ export default {
 
   stats: "통계",
   about: "정보",
+  repository: "GitHub 저장소",
   close: "닫기",
   plusCount: "＋ 누른 횟수",
   minusCount: "－ 누른 횟수",

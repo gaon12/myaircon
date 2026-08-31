@@ -20,6 +20,13 @@ export type Locale = {
   readonly nicknameLabel: string;
   readonly nicknamePlaceholder: string;
   readonly start: string;
+  /** 이름을 바꾸러 다시 들어갈 때 시작 버튼에 쓸 문구. */
+  readonly save: string;
+  readonly cancel: string;
+  /** 푸터의 이름 바꾸기 버튼. */
+  readonly rename: string;
+  /** 허용하지 않는 문자만 입력했을 때. */
+  readonly nicknameInvalid: string;
 
   readonly onlineOn: string;
   readonly onlineOff: string;
@@ -41,6 +48,8 @@ export type Locale = {
 
   readonly stats: string;
   readonly about: string;
+  /** 정보 모달의 저장소 링크. */
+  readonly repository: string;
   readonly close: string;
   readonly plusCount: string;
   readonly minusCount: string;

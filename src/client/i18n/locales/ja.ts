@@ -9,6 +9,10 @@ export default {
   nicknameLabel: "ニックネーム",
   nicknamePlaceholder: "ニックネーム（任意）",
   start: "スタート",
+  save: "保存",
+  cancel: "キャンセル",
+  rename: "名前を変更",
+  nicknameInvalid: "かな・漢字・ハングル・英数字のみ使えます",
 
   onlineOn: "オンラインモード オン",
   onlineOff: "オンラインモード オフ",
@@ -30,6 +34,7 @@ export default {
 
   stats: "統計",
   about: "情報",
+  repository: "GitHub リポジトリ",
   close: "閉じる",
   plusCount: "＋ を押した回数",
   minusCount: "－ を押した回数",

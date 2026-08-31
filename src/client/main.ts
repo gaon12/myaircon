@@ -1,4 +1,5 @@
 import { pickCharacter } from "../shared/characters.ts";
+import { stripDisallowed } from "../shared/nickname-charset.ts";
 import type {
   BlockedMessage,
   DeviceInfo,
@@ -34,6 +35,10 @@ const els = {
   nicknameDialog: requireElement("[data-nickname-dialog]", HTMLDialogElement),
   nicknameForm: requireElement("[data-nickname-form]", HTMLFormElement),
   nicknameInput: requireElement("[data-nickname-input]", HTMLInputElement),
+  nicknameError: requireElement("[data-nickname-error]", HTMLParagraphElement),
+  nicknameSubmit: requireElement("[data-nickname-submit]", HTMLButtonElement),
+  nicknameCancel: requireElement("[data-nickname-cancel]", HTMLButtonElement),
+  rename: requireElement("[data-rename]", HTMLButtonElement),
   statsDialog: requireElement("[data-stats-dialog]", HTMLDialogElement),
   plusCount: requireElement("[data-plus-count]", HTMLSpanElement),
   minusCount: requireElement("[data-minus-count]", HTMLSpanElement),
@@ -371,22 +376,90 @@ function toggleOnline(): void {
   }
 }
 
-/** 닉네임을 받은 뒤 컨트롤을 활성화하고 기기를 켠다. */
-async function start(username: string): Promise<void> {
+/**
+ * 닉네임을 받은 뒤 컨트롤을 활성화하고 기기를 켠다.
+ *
+ * @param withSound 소리를 바로 켤지. 폼을 제출해서 들어왔을 때만 true다.
+ *   저장된 이름으로 자동 시작할 때는 사용자 제스처가 없어서, 켜려고 하면
+ *   자동재생 정책에 막히고 "소리를 켤 수 없습니다" 안내만 뜬다. 애초에
+ *   페이지를 열자마자 소음이 나오는 것도 반갑지 않다.
+ */
+async function start(username: string, { withSound }: { withSound: boolean }): Promise<void> {
   if (state.started) return;
   state.started = true;
-  state.username = username;
+  setUsername(username);
 
   for (const button of [els.plus, els.minus, els.sound, els.online]) {
     button.disabled = false;
   }
+  els.rename.hidden = false;
 
   els.fan.classList.add("is-spinning");
   els.air.classList.add("is-blowing");
   renderTemperature();
 
   // 사용자 제스처(폼 제출) 안에서 호출해야 자동재생 정책에 걸리지 않는다.
-  await toggleSound();
+  if (withSound) await toggleSound();
+}
+
+// ------------------------------------------------------------------ 닉네임
+
+/**
+ * 이름을 정하고 저장한다.
+ *
+ * 저장해 두는 이유는 단순하다. 새로고침할 때마다 다시 치게 만들 이유가 없다.
+ * localStorage라 이 브라우저 안에만 남고 서버로 가지 않는다 -- 서버는
+ * 온도를 바꿀 때 이름을 함께 받을 뿐 누구인지 기억하지 않는다.
+ */
+function setUsername(username: string): void {
+  state.username = username;
+  writeValue("nickname", username);
+}
+
+/**
+ * 저장된 이름을 읽는다.
+ *
+ * localStorage는 사용자가 직접 고칠 수 있으므로 읽어 온 값도 입력창에서 온
+ * 것과 똑같이 검사한다. 규칙을 나중에 조이면 예전에 저장된 이름이 규칙에
+ * 안 맞을 수도 있는데, 그때도 여기서 걸러진다.
+ */
+function savedNickname(): string | null {
+  const raw = readValue("nickname");
+  if (raw === null) return null;
+  const cleaned = cleanNickname(raw);
+  return cleaned === "" ? null : cleaned;
+}
+
+/**
+ * 입력을 쓸 수 있는 이름으로 다듬는다. 서버의 normalizeNickname과 같은
+ * 문자 규칙을 쓰지만(둘 다 shared/nickname-charset.ts), 길이 자르기는
+ * 하지 않는다 -- 그건 input의 maxlength와 서버가 맡는다.
+ */
+function cleanNickname(raw: string): string {
+  return stripDisallowed(raw.normalize("NFC")).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 닉네임 모달을 연다.
+ *
+ * @param mode 처음 들어올 때(start)인지, 이름만 바꾸러 온 것(rename)인지.
+ *   처음이면 취소할 수단이 없어야 한다 -- 취소하면 아무것도 못 하는 화면에
+ *   갇히기 때문이다. 바꾸러 온 것이면 얼마든지 물러날 수 있어야 한다.
+ */
+function openNicknameDialog(mode: "start" | "rename"): void {
+  nicknameMode = mode;
+  els.nicknameInput.value = mode === "rename" ? state.username : (savedNickname() ?? "");
+  els.nicknameSubmit.textContent = mode === "rename" ? strings.save : strings.start;
+  els.nicknameCancel.hidden = mode !== "rename";
+  hideNicknameError();
+  if (!els.nicknameDialog.open) els.nicknameDialog.showModal();
+  els.nicknameInput.focus();
+  els.nicknameInput.select();
+}
+
+function hideNicknameError(): void {
+  els.nicknameError.hidden = true;
+  els.nicknameError.textContent = "";
 }
 
 // ---------------------------------------------------------------- 언어 / 테마
@@ -416,6 +489,9 @@ function renderStrings(): void {
   }
 
   els.nicknameInput.placeholder = strings.nicknamePlaceholder;
+  // 위의 data-i18n 순회가 시작 버튼을 무조건 "시작"으로 돌려놓는다. 이름을
+  // 바꾸는 중이라면 "저장"이어야 하므로 여기서 다시 맞춘다.
+  if (nicknameMode === "rename") els.nicknameSubmit.textContent = strings.save;
   els.aboutLines.replaceChildren(
     ...strings.aboutLines(deviceName()).map((line) => {
       const paragraph = document.createElement("p");
@@ -485,11 +561,94 @@ audio.addEventListener("failed", () => {
   setSoundLabel();
 });
 
+/** 지금 모달이 처음 들어온 것인지 이름만 바꾸는 것인지. */
+let nicknameMode: "start" | "rename" = "start";
+
+// 입력하는 동안 쓸 수 없는 문자를 조용히 지운다. "이 글자는 안 됩니다"를
+// 띄우는 것보다 손이 덜 간다. 커서 위치는 지워진 글자 수만큼 당겨 준다 --
+// 그러지 않으면 이모지를 하나 지울 때마다 커서가 맨 뒤로 튄다.
+els.nicknameInput.addEventListener("input", () => {
+  const before = els.nicknameInput.value;
+  const after = stripDisallowed(before);
+  if (after === before) return;
+  const caret = els.nicknameInput.selectionStart ?? after.length;
+  const removedBeforeCaret =
+    before.slice(0, caret).length - stripDisallowed(before.slice(0, caret)).length;
+  els.nicknameInput.value = after;
+  const next = Math.max(0, caret - removedBeforeCaret);
+  els.nicknameInput.setSelectionRange(next, next);
+  hideNicknameError();
+});
+
 els.nicknameForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  const name = cleanNickname(els.nicknameInput.value);
+  if (name === "") {
+    // 전부 지워졌다는 것은 쓸 수 없는 문자만 넣었다는 뜻이다. 이때만 말한다.
+    els.nicknameError.textContent = strings.nicknameInvalid;
+    els.nicknameError.hidden = false;
+    return;
+  }
   els.nicknameDialog.close();
-  void start(els.nicknameInput.value);
+  if (nicknameMode === "rename") {
+    setUsername(name);
+    return;
+  }
+  void start(name, { withSound: true });
 });
+
+els.nicknameCancel.addEventListener("click", () => els.nicknameDialog.close());
+els.rename.addEventListener("click", () => openNicknameDialog("rename"));
+
+/*
+ * 관문 두 개(최초 닉네임 입력, 확인 화면)는 Esc로 치울 수 없어야 한다.
+ * 닉네임 모달을 닫아 봐야 아무 버튼도 누를 수 없는 화면에 갇힐 뿐이고,
+ * 다시 여는 방법도 없다. 실제로 그랬다 -- Esc 한 번이면 앱이 죽었다.
+ *
+ * cancel에서 preventDefault 하는 것만으로는 부족하다. 크로미움은 dialog를
+ * CloseWatcher로 처리하는데, **사용자 활성화가 아직 없으면 취소를 무시하고
+ * 그냥 닫는다.** 페이지를 열자마자 Esc를 누르는 경우가 정확히 그 상황이다.
+ * 그래서 닫힌 뒤에 다시 여는 것으로 한 겹 더 받친다. 브라우저가 어떻게
+ * 처리하든 갇히지 않는다.
+ */
+els.nicknameDialog.addEventListener("cancel", (event) => {
+  if (nicknameMode === "start") event.preventDefault();
+});
+els.nicknameDialog.addEventListener("close", () => {
+  if (nicknameMode === "start" && !state.started) openNicknameDialog("start");
+});
+
+els.verifyDialog.addEventListener("cancel", (event) => event.preventDefault());
+els.verifyDialog.addEventListener("close", () => {
+  // 접속이 끝나면 onStatus가 정상적으로 닫는다. 그 전에 닫혔다면 사용자가
+  // Esc를 누른 것이므로 되돌린다.
+  if (state.online && !connection.connected) {
+    showVerifyDialog(els.verifyDialog.classList.contains("is-caught") ? "caught" : "scanning");
+  }
+});
+
+/**
+ * 바깥을 누르면 닫힌다.
+ *
+ * <dialog>의 클릭 이벤트는 backdrop을 눌러도 dialog 자신을 target으로 준다.
+ * 그런데 dialog에는 padding이 있어서 target만 보면 테두리 안쪽 여백을 눌러도
+ * 닫혀 버린다. 그래서 좌표가 실제로 상자 밖인지 본다.
+ *
+ * 관문 두 개(닉네임 최초 입력, 확인 화면)는 제외한다. cancel을 막아 둔 것과
+ * 같은 이유다.
+ */
+for (const dialog of [els.statsDialog, els.aboutDialog]) {
+  dialog.addEventListener("click", (event) => {
+    if (event.target !== dialog) return;
+    const box = dialog.getBoundingClientRect();
+    const outside =
+      event.clientX < box.left ||
+      event.clientX > box.right ||
+      event.clientY < box.top ||
+      event.clientY > box.bottom;
+    if (outside) dialog.close();
+  });
+}
 
 els.plus.addEventListener("click", () => adjust("up"));
 els.minus.addEventListener("click", () => adjust("down"));
@@ -557,4 +716,14 @@ for (const button of document.querySelectorAll("[data-close-dialog]")) {
 buildLanguageOptions();
 renderStrings();
 guardTemperatureDisplay();
-els.nicknameDialog.showModal();
+
+// 지난번에 쓰던 이름이 있으면 묻지 않고 바로 시작한다. 새로고침할 때마다
+// 같은 이름을 다시 치게 만들 이유가 없다. 소리는 켜지 않는다 -- 사용자
+// 제스처가 없어서 자동재생 정책에 막히고, 페이지를 열자마자 소음이 나오는
+// 것도 반갑지 않다.
+const remembered = savedNickname();
+if (remembered === null) {
+  openNicknameDialog("start");
+} else {
+  void start(remembered, { withSound: false });
+}

@@ -138,6 +138,7 @@
       <label class="visually-hidden" for="theme" data-i18n="theme">테마</label>
       <select id="theme" class="select" data-theme-select></select>
       <span class="footer-online" data-footer-online aria-live="polite" hidden></span>
+      <button type="button" class="link" data-rename data-i18n="rename" hidden>이름 바꾸기</button>
       <button type="button" class="link" data-show-stats data-i18n="stats">통계</button>
       <button type="button" class="link" data-show-about data-i18n="about">정보</button>
     </footer>
@@ -153,7 +154,9 @@
           autocomplete="off"
           enterkeyhint="go"
         />
-        <button type="submit" class="pill" data-i18n="start">시작</button>
+        <p class="field-error" data-nickname-error role="alert" hidden></p>
+        <button type="submit" class="pill" data-nickname-submit data-i18n="start">시작</button>
+        <button type="button" class="link" data-nickname-cancel data-i18n="cancel" hidden>취소</button>
       </form>
     </dialog>
 
@@ -228,6 +231,16 @@
 
     <dialog class="dialog" data-about-dialog>
       <div data-about-lines></div>
+      <p>
+        <a
+          class="link"
+          href="https://github.com/gaon12/myaircon"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-i18n="repository"
+          >GitHub 저장소</a
+        >
+      </p>
       <button type="button" class="pill" data-close-dialog data-i18n="close" autofocus>닫기</button>
     </dialog>
 

@@ -90,13 +90,30 @@ describe("HTTP 서버", () => {
 
   it("HTML에 CDN 스크립트가 남아 있지 않다", async () => {
     // CSP가 외부 출처를 막고 있으므로 CDN 태그가 남으면 페이지가 조용히 깨진다.
+    //
+    // 보는 것은 **하위 자원**뿐이다. src=(script/img/iframe)와 <link>의 href가
+    // 그것이다. <a href>는 자원이 아니라 이동이라 CSP가 막지 않는다 -- 예전
+    // 정규식은 href를 통째로 잡아서, 정보 모달에 저장소 링크를 넣자마자
+    // 실패했다. 링크 하나를 못 넣게 만드는 검사는 검사가 아니라 방해다.
     const html = await readFile(path.join(baseConfig.publicDir, "index.html"), "utf8");
-    const externalSrc = [...html.matchAll(/(?:src|href)\s*=\s*["'](https?:)?\/\/[^"']+/gi)];
+    const external = [
+      ...html.matchAll(/\bsrc\s*=\s*["'](https?:)?\/\/[^"']+/gi),
+      ...html.matchAll(/<link\b[^>]*\bhref\s*=\s*["'](https?:)?\/\/[^"']+/gi),
+    ];
     assert.deepEqual(
-      externalSrc.map((m) => m[0]),
+      external.map((m) => m[0]),
       [],
       "외부 출처 참조가 남아 있으면 CSP에 막힌다",
     );
+  });
+
+  it("바깥으로 나가는 링크에는 rel=noopener가 붙어 있다", async () => {
+    // target=_blank로 연 창은 opener를 통해 원래 탭을 건드릴 수 있다.
+    // 요즘 브라우저는 기본으로 막지만, 명시해 두는 값이 더 크다.
+    const html = await readFile(path.join(baseConfig.publicDir, "index.html"), "utf8");
+    for (const [tag] of html.matchAll(/<a\b[^>]*target\s*=\s*["']_blank["'][^>]*>/gi)) {
+      assert.match(tag, /rel\s*=\s*["'][^"']*noopener/i, tag);
+    }
   });
 });
 

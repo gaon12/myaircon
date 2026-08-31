@@ -9,6 +9,10 @@ export default {
   nicknameLabel: "暱稱",
   nicknamePlaceholder: "暱稱（選填）",
   start: "開始",
+  save: "儲存",
+  cancel: "取消",
+  rename: "修改名稱",
+  nicknameInvalid: "只能使用漢字、假名、諺文和英文數字",
 
   onlineOn: "線上模式已開啟",
   onlineOff: "線上模式已關閉",
@@ -30,6 +34,7 @@ export default {
 
   stats: "統計",
   about: "關於",
+  repository: "GitHub 儲存庫",
   close: "關閉",
   plusCount: "＋ 按下次數",
   minusCount: "－ 按下次數",
