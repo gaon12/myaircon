@@ -60,10 +60,22 @@ describe("StateStore", () => {
     for (let temp = 18; temp <= 30; temp++) store.schedule({ temp });
 
     // 디바운스가 끝나기 전에는 아직 파일이 없어야 한다
-    assert.rejects(() => readFile(file, "utf8"));
+    await assert.rejects(() => readFile(file, "utf8"));
 
-    await delay(80);
-    assert.deepEqual(JSON.parse(await readFile(file, "utf8")), { temp: 30 });
+    // 고정 대기로 기다리면 부하가 걸린 CI에서 간헐적으로 실패한다.
+    // 타이머가 실제로 돌 때까지 폴링한다.
+    const deadline = Date.now() + 5000;
+    let written: string | null = null;
+    while (Date.now() < deadline) {
+      try {
+        written = await readFile(file, "utf8");
+        break;
+      } catch {
+        await delay(20);
+      }
+    }
+    assert.ok(written !== null, "디바운스 후에도 파일이 쓰이지 않았다");
+    assert.deepEqual(JSON.parse(written), { temp: 30 });
   });
 
   it("flush는 예약된 쓰기를 즉시 수행한다 (종료 경로)", async () => {

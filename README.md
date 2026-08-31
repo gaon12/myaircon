@@ -68,6 +68,8 @@ npm run dev
 | `SERVICE_TIMEZONE` | (서버 로컬) | 계절 판정과 통계 "오늘"의 IANA 시간대 |
 | `STATS_ENABLED` | `true` | 순위·기록·활동 그래프 수집 |
 | `ADMIN_TOKEN` | (없음) | 설정해야 관리 API와 `/admin.html`이 열린다 |
+| `GUARD_ENABLED` | `true` | 요청·연결 제한과 행동 점수 |
+| `GUARD_MAX_SOCKETS_PER_IP` | `8` | IP당 동시 소켓 수 상한 |
 | `TEMP_MIN` / `TEMP_MAX` | `18` / `30` | 온도 범위 |
 | `PERSIST_STATE` | `true` | 공유 온도를 디스크에 저장할지 |
 | `RATE_LIMIT_POINTS` | `10` | `RATE_LIMIT_DURATION_SECONDS`(기본 2초)당 허용 횟수 |
@@ -131,6 +133,22 @@ nginx 한 대 뒤        TRUST_PROXY_HOPS=1
 CDN + nginx 두 단 뒤   TRUST_PROXY_HOPS=2
 ```
 
+### 리버스 프록시 설정 예시
+
+바로 쓸 수 있는 예시를 넣어 두었다. 틀리기 쉬운 것들(WebSocket 업그레이드,
+타임아웃, `X-Forwarded-For`)을 주석으로 짚었다.
+
+- [`deploy/nginx.conf.example`](deploy/nginx.conf.example)
+- [`deploy/apache.conf.example`](deploy/apache.conf.example)
+
+특히 두 가지를 놓치기 쉽다.
+
+1. **WebSocket 업그레이드를 넘기지 않으면** socket.io가 polling으로만 붙거나
+   아예 실패한다. 그리고 `proxy_read_timeout` 기본값(60초)을 그대로 두면
+   연결이 조용히 끊긴다.
+2. **HSTS를 프록시와 앱 양쪽에서 켜지 말 것.** 프록시에서 켰다면 앱은
+   `HSTS_MAX_AGE=0`(기본값)으로 둔다.
+
 ### 프로세스 관리
 
 pm2 등으로 띄우고 싶다면 전역에 설치해서 쓴다. 프로세스 매니저는 배포 환경의
@@ -148,7 +166,9 @@ pm2 start npm --name myaircon -- start
 ```
 GET /healthz    ->  {"status":"ok","temp":18,"min":18,"max":30,"device":"aircon","uptimeSeconds":42}
 GET /api/stats  ->  {"online":3,"today":[...],"allTime":[...],"recent":[...],"hourly":[...],"at":...}
-GET /api/admin/* ->  관리 API (ADMIN_TOKEN 필요, 아래 참고)
+GET /api/challenge -> 확인용 작업증명 문제 (점수가 애매할 때 클라이언트가 요청)
+POST /api/verify   -> 답 제출, 소켓 핸드셰이크에 낼 토큰을 받는다
+GET /api/admin/*   -> 관리 API (ADMIN_TOKEN 필요, 아래 참고)
 ```
 
 ### 상태 파일
@@ -209,6 +229,7 @@ src/
     protocol.ts   와이어 메시지 스키마 + 타입
     stats.ts      통계 응답 스키마 + 타입
     admin.ts      관리 API 스키마 + 타입
+    challenge.ts  확인 절차 스키마 + 타입
   server/
     config.ts       환경변수 기반 설정 (부팅 시점 검증)
     device.ts       계절에 따른 기기 종류 판정과 이미지 경로 해석
@@ -216,6 +237,8 @@ src/
     identity.ts     접속 주소에서 유도한 표시 태그
     ban-store.ts    차단 목록 (메모리 판정 + SQLite 영속)
     admin.ts        관리 API (토큰 인증)
+    guard.ts        IP별 카운터와 행동 점수
+    challenge.ts    작업증명 발급/검증
     thermostat.ts   공유 온도값. I/O 없는 순수 로직
     nickname.ts     신뢰할 수 없는 닉네임 입력 정규화
     client-ip.ts    rate limit 키가 될 클라이언트 주소 해석
@@ -233,10 +256,13 @@ src/
     theme.ts      라이트/다크 테마
     stats.ts      통계 화면(순위·최근 기록·활동 그래프)
     admin.ts      관리 화면
+    challenge.ts  작업증명 풀이
     i18n/         로케일 등록, BCP-47 협상, Locale 계약
 public/
   index.html      마크업 (인라인 script/style 없음)
   admin.html      관리 화면
+  robots.txt
+deploy/           리버스 프록시 설정 예시
   styles.css
 test/             Node 내장 러너 기반 테스트 (*.test.ts)
 ```
@@ -389,6 +415,54 @@ kick은 **끊기 + 차단**이다. 끊기만 하면 새로고침 한 번에 돌�
 > **IP 차단은 VPN이나 모바일 IP 변경으로 우회된다.** 완전한 차단이 아니라
 > 가벼운 장난의 비용을 올리는 장치다. 그리고 `TRUST_PROXY_HOPS`가 실제 구성과
 > 맞지 않으면 엉뚱한 사람이 차단되니 반드시 확인할 것.
+
+## 남용 방어
+
+계층을 나눠 생각한다.
+
+> **리버스 프록시는 양(volume)을 막고, 앱은 의미(semantics)를 막는다.**
+
+프록시는 연결 수와 요청 속도를 Node에 닿기 전에 끊는다 — 훨씬 싸다.
+반대로 프록시는 "이 요청이 socket.io 핸드셰이크인지 버튼 누름인지", "이 IP가
+지금 소켓을 몇 개 들고 있는지"를 모른다. 그건 앱만 안다.
+
+| 위협 | 어디서 막나 |
+| --- | --- |
+| L3/L4 DDoS, 느린 클라이언트 | 프록시 / CDN |
+| 요청·연결 폭주 (일반) | 프록시 `limit_req` `limit_conn` + 앱 rate limit |
+| IP당 동시 소켓 수 | 앱 (`GUARD_MAX_SOCKETS_PER_IP`) |
+| 버튼 연타 farming | 앱 (rate limit + 실제 변경만 집계) |
+| 관리 토큰 무차별 대입 | 앱 (5회 실패 시 15분 잠금) |
+| 크롤러 | `robots.txt` |
+
+### 점수와 확인
+
+행동에 점수를 매기고, 애매하면 **차단 대신 확인**을 요구한다.
+
+| 신호 | 비중 |
+| --- | --- |
+| 동시 소켓 수 | 40 |
+| 핸드셰이크 빈도 | 30 |
+| 누적 의심 (rate limit 적중 등, 10분 뒤 소멸) | 30 |
+
+50점 이상이면 확인, 85점 이상이면 차단(둘 다 설정 가능).
+
+확인은 작업증명이다. `sha256(nonce + 답)`의 앞 14비트가 0인 답을 찾게 한다.
+브라우저에서 보통 1초 미만이고, 서버 검증은 해시 한 번(실측 0.38ms)이다.
+외부 서비스도, 쿠키도, 개인정보도 쓰지 않는다.
+
+> **왜 Anubis처럼 모두에게 걸지 않나.**
+> 그 방식은 렌더링이 비싼 페이지를 대량 크롤링에서 지키는 도구다. 이 앱의
+> 페이지는 정적 HTML 몇 KB라 지킬 것이 없고, 남용 경로는 WebSocket이다.
+> 페이지에 작업증명을 걸어도 socket.io 프로토콜을 아는 쪽은 `/socket.io/`로
+> 바로 붙으면 그만이라 아무것도 막지 못한다. 반면 순위를 노리는 쪽은 CPU
+> 몇백 ms를 기꺼이 쓰고, 선량한 방문자 전원이 지연을 문다.
+>
+> **그리고 이 점수는 Cloudflare 같은 것이 아니다.** 저쪽은 전 세계 트래픽과
+> TLS 지문, 학습된 모델을 본다. 여기서 볼 수 있는 것은 이 서버가 관찰한
+> 것뿐이고, 무성의한 자동화를 걸러내는 휴리스틱이다. 그래서 애매하면
+> 차단하지 않고 확인만 요구한다 — 사무실이나 학교처럼 한 주소를 여럿이 쓰면
+> 정상 사용자도 한도에 걸리기 때문이다.
 
 ## 실시간 프로토콜
 
