@@ -67,6 +67,7 @@ npm run dev
 | `WINTER_MONTHS` | `11,12,1,2,3` | 온풍기로 취급할 월 |
 | `SERVICE_TIMEZONE` | (서버 로컬) | 계절 판정과 통계 "오늘"의 IANA 시간대 |
 | `STATS_ENABLED` | `true` | 순위·기록·활동 그래프 수집 |
+| `ADMIN_TOKEN` | (없음) | 설정해야 관리 API와 `/admin.html`이 열린다 |
 | `TEMP_MIN` / `TEMP_MAX` | `18` / `30` | 온도 범위 |
 | `PERSIST_STATE` | `true` | 공유 온도를 디스크에 저장할지 |
 | `RATE_LIMIT_POINTS` | `10` | `RATE_LIMIT_DURATION_SECONDS`(기본 2초)당 허용 횟수 |
@@ -147,13 +148,15 @@ pm2 start npm --name myaircon -- start
 ```
 GET /healthz    ->  {"status":"ok","temp":18,"min":18,"max":30,"device":"aircon","uptimeSeconds":42}
 GET /api/stats  ->  {"online":3,"today":[...],"allTime":[...],"recent":[...],"hourly":[...],"at":...}
+GET /api/admin/* ->  관리 API (ADMIN_TOKEN 필요, 아래 참고)
 ```
 
 ### 상태 파일
 
 공유 온도는 `data/state.json`(`STATE_FILE`), 통계는 `data/stats.db`(`STATS_FILE`)에
-저장되어 재시작 후에도 이어진다. 컨테이너로 배포한다면 `data/`를 볼륨으로 잡거나
-`PERSIST_STATE=false` / `STATS_ENABLED=false`로 끈다.
+저장되고, 차단 목록은 `data/bans.db`(`BAN_FILE`)에 저장되어 재시작 후에도 이어진다.
+컨테이너로 배포한다면 `data/`를 볼륨으로 잡거나 `PERSIST_STATE=false` /
+`STATS_ENABLED=false`로 끈다.
 
 ## 다국어
 
@@ -205,10 +208,14 @@ src/
     validate.ts   런타임 검증 유틸 (의존성 0)
     protocol.ts   와이어 메시지 스키마 + 타입
     stats.ts      통계 응답 스키마 + 타입
+    admin.ts      관리 API 스키마 + 타입
   server/
     config.ts       환경변수 기반 설정 (부팅 시점 검증)
     device.ts       계절에 따른 기기 종류 판정과 이미지 경로 해석
     stats-store.ts  통계 집계(메모리) + SQLite 백업
+    identity.ts     접속 주소에서 유도한 표시 태그
+    ban-store.ts    차단 목록 (메모리 판정 + SQLite 영속)
+    admin.ts        관리 API (토큰 인증)
     thermostat.ts   공유 온도값. I/O 없는 순수 로직
     nickname.ts     신뢰할 수 없는 닉네임 입력 정규화
     client-ip.ts    rate limit 키가 될 클라이언트 주소 해석
@@ -225,9 +232,11 @@ src/
     storage.ts    localStorage 래퍼
     theme.ts      라이트/다크 테마
     stats.ts      통계 화면(순위·최근 기록·활동 그래프)
+    admin.ts      관리 화면
     i18n/         로케일 등록, BCP-47 협상, Locale 계약
 public/
   index.html      마크업 (인라인 script/style 없음)
+  admin.html      관리 화면
   styles.css
 test/             Node 내장 러너 기반 테스트 (*.test.ts)
 ```
@@ -315,9 +324,27 @@ Stats 다이얼로그에서 볼 수 있다.
 - **모든 이벤트를 영구 저장하지 않는다.** rate limit 상한 기준 활성 IP
   100개면 하루 3.2GB다. 누계와 롤업으로 같은 화면을 만든다.
 
+### 표시용 태그
+
+이름 옆에 `가온#7c2` 처럼 짧은 태그가 붙는다. 같은 이름을 쓰는 사람을 구분하기
+위한 것이다.
+
+태그는 `HMAC(비밀키, 접속 주소)`의 앞 3자리다. 그래서
+
+- 클라이언트가 위조할 수 없다 (비밀키를 모른다)
+- 새로고침해도 같은 태그가 나온다
+- 쿠키나 localStorage를 쓰지 않으니 추적 식별자가 아니다
+- 태그만으로 원래 주소를 되돌릴 수 없다
+
+같은 집이나 사무실은 태그를 공유하고, 모바일에서 IP가 바뀌면 태그도 바뀐다.
+완전한 신원이 아니라 "대체로 같은 사람"을 가리키는 표시다.
+
+비밀키는 `IDENTITY_SECRET`으로 지정하거나, 없으면 서버가 한 번 만들어 통계
+DB에 저장한다. **인스턴스를 여러 개 띄운다면 같은 값을 명시해야** 태그가 일치한다.
+
 ### 알아둘 것
 
-- **순위는 사람이 아니라 이름 기준이다.** 닉네임에 인증도 유일성도 없다.
+- **순위는 사람이 아니라 이름+태그 기준이다.** 닉네임에 인증도 유일성도 없다.
   화면에도 그렇게 적어 두었고, 그래서 "오늘" 탭을 함께 둔다 — 하루면 리셋되니
   한 번 굳은 순위가 영원히 고정되지 않는다.
 - **집계에 상한이 있다.** 스크립트가 매번 다른 닉네임을 보내면 메모리가
@@ -325,10 +352,43 @@ Stats 다이얼로그에서 볼 수 있다.
   상위 500개만 남긴다.
 - **실제로 온도가 바뀐 것만 센다.** 30도에서 `+`를 연타해 순위를 올리는
   경로를 막는다.
-- **최근 기록은 재시작하면 비워진다.** 메모리 링버퍼이고 "최근"은 본래
-  휘발성이라고 봤다. 순위와 활동 그래프는 남는다.
+- 순위·활동 그래프·최근 기록 모두 재시작 후에도 남는다 (`data/stats.db`).
 - 집계는 프로세스 로컬이다. 인스턴스를 2개 이상으로 늘리면 통계가 갈라진다
   (rate limit도 이미 같은 제약이 있다).
+
+## 관리 (kick / 차단)
+
+`ADMIN_TOKEN`을 설정하면 `/admin.html`과 `/api/admin/*`이 열린다. **미설정이면
+라우트 자체가 등록되지 않는다** — 빈 토큰으로 열려 있는 것보다 없는 편이 안전하다.
+
+```bash
+ADMIN_TOKEN=$(openssl rand -hex 24) npm start
+```
+
+관리 페이지에서 접속 목록(태그·닉네임·주소·접속 시간)과 차단 목록을 보고 각 행에서
+kick / 해제할 수 있다. 토큰은 `sessionStorage`에만 저장된다.
+
+| 엔드포인트 | 하는 일 |
+| --- | --- |
+| `GET /api/admin/overview` | 접속 목록 + 차단 목록 + 접속자 수 |
+| `POST /api/admin/kick` | `{ target: {ip} \| {tag}, minutes, reason }` |
+| `POST /api/admin/unban` | `{ ip }` |
+
+모두 `Authorization: Bearer <ADMIN_TOKEN>`이 필요하다.
+
+### 왜 IP 기준인가
+
+닉네임은 자유 문자열이라 제재 대상이 될 수 없다. "가온을 kick"은 지금 그 이름을
+쓰는 모두를 끊고, 그들은 다른 이름으로 즉시 돌아온다. 클라이언트가 보내는
+UUID도 마찬가지다 — 클라이언트가 만드는 값은 클라이언트가 바꿀 수 있다.
+서버가 스스로 확인할 수 있는 것은 접속 주소뿐이다.
+
+kick은 **끊기 + 차단**이다. 끊기만 하면 새로고침 한 번에 돌아온다. 차단은
+핸드셰이크 단계에서 막고 재시작 후에도 유지된다(`data/bans.db`).
+
+> **IP 차단은 VPN이나 모바일 IP 변경으로 우회된다.** 완전한 차단이 아니라
+> 가벼운 장난의 비용을 올리는 장치다. 그리고 `TRUST_PROXY_HOPS`가 실제 구성과
+> 맞지 않으면 엉뚱한 사람이 차단되니 반드시 확인할 것.
 
 ## 실시간 프로토콜
 
