@@ -153,13 +153,14 @@ describe("실시간 온도 조절", () => {
     assert.equal(nameOf(data.username), "익명");
   });
 
-  it("이모지 닉네임이 깨지지 않고 잘린다", async () => {
+  it("이모지 닉네임은 서버가 걸러낸다", async () => {
+    // 클라이언트에서도 입력 단계에서 막지만, 서버는 우리 클라이언트를
+    // 쓰지 않는 쪽도 상대해야 한다.
     server = await startTestServer();
     const { socket } = await server.connect();
-    socket.emit("plus", "👨‍👩‍👧‍👦🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉");
+    socket.emit("plus", "가온🎉🎉🎉");
     const { username } = await once<TempChangeMessage>(socket, "tempChange");
-    assert.ok(!username.includes("\uFFFD"), "surrogate pair가 반토막 나면 안 된다");
-    assert.ok(username.startsWith("👨‍👩‍👧‍👦"));
+    assert.equal(nameOf(username), "가온");
   });
 
   it("빈 닉네임은 기본값으로 대체된다", async () => {

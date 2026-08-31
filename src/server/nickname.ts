@@ -1,3 +1,5 @@
+import { stripDisallowed } from "../shared/nickname-charset.ts";
+
 // 닉네임에서 걸러낼 문자들.
 //   \p{Cc}          제어문자
 //   U+200B          zero-width space
@@ -14,9 +16,9 @@ const INVISIBLE = /[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u20
 const WHITESPACE_CONTROL = /[\t\n\v\f\r]/g;
 const WHITESPACE_RUN = /\s+/g;
 
-// 코드 유닛이 아니라 grapheme 단위로 잘라야 이모지/한글 조합이 깨지지 않는다.
-// 기존 코드의 `arg.substring(0, 9)`는 UTF-16 코드 유닛 기준이라 이모지의
-// surrogate pair를 반토막 내서 U+FFFD로 깨진 닉네임을 브로드캐스트했다.
+// 코드 유닛이 아니라 grapheme 단위로 잘라야 한글 조합이 깨지지 않는다.
+// 기존 코드의 `arg.substring(0, 9)`는 UTF-16 코드 유닛 기준이라 문자를
+// 반토막 내서 U+FFFD로 깨진 닉네임을 브로드캐스트했다.
 const segmenter = new Intl.Segmenter("ko", { granularity: "grapheme" });
 
 export type NicknameOptions = {
@@ -40,6 +42,12 @@ function truncateGraphemes(text: string, maxLength: number): string {
 /**
  * 클라이언트가 보낸 닉네임을 신뢰할 수 없는 입력으로 취급해 정규화한다.
  *
+ * 순서가 중요하다. 보이지 않는 문자를 먼저 지우고, 그 다음 허용 문자만
+ * 남긴다. 반대로 하면 "a<ZWSP>b" 같은 입력에서 ZWSP가 허용 목록에 걸려
+ * 지워지는 것은 같지만, 제어문자를 공백으로 바꾸는 단계를 놓친다.
+ * 마지막에 공백을 접는 것도 이 뒤여야 한다 -- 문자를 지우고 나면 공백이
+ * 두 칸씩 남기 때문이다("a@@b" -> "a  b" 가 아니라 "ab").
+ *
  * 기존 코드는 `arg.substring(0, 9)` 한 줄이 전부여서
  *   - 문자열이 아닌 값(숫자/null/객체)이 오면 TypeError가 나고, 그 예외가
  *     rate limit용 catch에 삼켜져 사용자에게 "너무 잦은 요청"이라는 거짓
@@ -52,10 +60,9 @@ function truncateGraphemes(text: string, maxLength: number): string {
 export function normalizeNickname(raw: unknown, { maxLength, fallback }: NicknameOptions): string {
   if (typeof raw !== "string") return fallback;
 
-  const cleaned = raw
-    .normalize("NFC")
-    .replace(WHITESPACE_CONTROL, " ")
-    .replace(INVISIBLE, "")
+  const cleaned = stripDisallowed(
+    raw.normalize("NFC").replace(WHITESPACE_CONTROL, " ").replace(INVISIBLE, ""),
+  )
     .replace(WHITESPACE_RUN, " ")
     .trim();
 
