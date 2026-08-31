@@ -11,7 +11,7 @@ export type ConfigOverrides = Partial<Omit<AppConfig, NestedKey>> & {
   [K in NestedKey]?: Partial<AppConfig[K]>;
 };
 
-type NestedKey = "temperature" | "rateLimit" | "nickname" | "security" | "device";
+type NestedKey = "temperature" | "rateLimit" | "nickname" | "security" | "device" | "stats";
 
 function mergeConfig(base: AppConfig, overrides: ConfigOverrides): AppConfig {
   return {
@@ -22,6 +22,8 @@ function mergeConfig(base: AppConfig, overrides: ConfigOverrides): AppConfig {
     nickname: { ...base.nickname, ...overrides.nickname },
     security: { ...base.security, ...overrides.security },
     device: { ...base.device, ...overrides.device },
+    // 테스트는 기본적으로 디스크를 쓰지 않는다.
+    stats: { ...base.stats, file: ":memory:", ...overrides.stats },
   };
 }
 

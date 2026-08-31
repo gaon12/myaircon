@@ -7,6 +7,7 @@ import type { ClientToServerEvents, ServerToClientEvents } from "../shared/proto
 import { type AppConfig, config as defaultConfig } from "./config.ts";
 import { type AppSocketServer, type RealtimeHandle, registerRealtime } from "./realtime.ts";
 import { StateStore } from "./state-store.ts";
+import { StatsStore } from "./stats-store.ts";
 import { Thermostat } from "./thermostat.ts";
 
 // socket.io 클라이언트 번들의 실제 위치. package.json은 exports 맵에 공개돼
@@ -28,6 +29,7 @@ export type AppContext = {
   io: AppSocketServer;
   thermostat: Thermostat;
   store: StateStore;
+  stats: StatsStore;
   config: AppConfig;
   realtime: RealtimeHandle;
 };
@@ -61,6 +63,17 @@ export async function buildApp({
     debounceMs: config.persistDebounceMs,
     logger: app.log,
     enabled: config.persistenceEnabled,
+  });
+
+  const stats = new StatsStore({
+    file: config.stats.file,
+    enabled: config.stats.enabled,
+    timeZone: config.timeZone,
+    maxNames: config.stats.maxNames,
+    recentSize: config.stats.recentSize,
+    retentionHours: config.stats.retentionHours,
+    flushIntervalMs: config.stats.flushIntervalMs,
+    logger: app.log,
   });
 
   const saved = await store.load();
@@ -127,6 +140,7 @@ export async function buildApp({
     thermostat,
     config,
     logger: app.log,
+    stats,
     onChange: (temp) => store.schedule({ temp }),
   });
 
@@ -140,7 +154,16 @@ export async function buildApp({
     uptimeSeconds: Math.floor(process.uptime()),
   }));
 
-  return { app, io, thermostat, store, config, realtime };
+  // 통계는 밀지 않고 가져가게 한다. 버튼을 누를 때마다 전원에게 보내면
+  // 접속자 수에 비례해 비용이 늘지만, 다이얼로그를 열 때만 가져가면 O(1)이다.
+  app.get("/api/stats", async (_req, reply) => {
+    // 집계가 전부 메모리에 있어 매번 만들어도 싸다. 그래도 연타 대비로
+    // 짧게 캐시할 수 있도록 클라이언트에 캐시 힌트를 준다.
+    reply.header("Cache-Control", "no-store");
+    return stats.snapshot(realtime.online);
+  });
+
+  return { app, io, thermostat, store, stats, config, realtime };
 }
 
 /**
@@ -150,10 +173,11 @@ export async function buildApp({
  * app.close()가 ERR_SERVER_NOT_RUNNING을 만난다. 그래서 소켓과 engine.io
  * 타이머만 직접 정리하고 서버 종료는 Fastify에 맡긴다.
  */
-export async function closeApp({ app, io, store, realtime }: AppContext): Promise<void> {
+export async function closeApp({ app, io, store, stats, realtime }: AppContext): Promise<void> {
   realtime.stop();
   io.disconnectSockets(true);
   io.engine.close();
   await app.close();
   await store.flush();
+  stats.close();
 }

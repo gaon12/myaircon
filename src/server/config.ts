@@ -62,8 +62,15 @@ function readMonths(name: string, fallback: number[]): number[] {
   return months;
 }
 
-/** 빈 문자열이면 null(= 서버 프로세스의 로컬 시간대). */
-function readTimeZone(name: string): string | null {
+/**
+ * 서비스가 자기 시각으로 삼을 시간대. 계절 판정과 통계의 "오늘" 경계에 쓴다.
+ * 빈 문자열이면 null(= 서버 프로세스의 로컬 시간대).
+ *
+ * 예전 이름 SEASON_TIMEZONE도 계속 받는다. 하는 일이 계절 판정만이 아니게 돼서
+ * 이름을 바꿨지만, 이미 설정해 둔 곳이 깨지면 안 된다.
+ */
+function readServiceTimeZone(): string | null {
+  const name = process.env.SERVICE_TIMEZONE ? "SERVICE_TIMEZONE" : "SEASON_TIMEZONE";
   const raw = readString(name, "");
   if (raw === "") return null;
   if (!isValidTimeZone(raw)) {
@@ -71,6 +78,8 @@ function readTimeZone(name: string): string | null {
   }
   return raw;
 }
+
+const SERVICE_TIME_ZONE = readServiceTimeZone();
 
 const TEMP_MIN = readInt("TEMP_MIN", 18, { min: -50, max: 100 });
 const TEMP_MAX = readInt("TEMP_MAX", 30, { min: -50, max: 100 });
@@ -82,6 +91,8 @@ export type AppConfig = {
   host: string;
   port: number;
   logLevel: string;
+  /** 서비스가 자기 시각으로 삼을 시간대. null이면 서버 로컬. */
+  timeZone: string | null;
   publicDir: string;
   stateFile: string;
   persistDebounceMs: number;
@@ -93,6 +104,16 @@ export type AppConfig = {
     /** null이면 서버 프로세스의 로컬 시간대를 쓴다. */
     timeZone: string | null;
     recheckIntervalMs: number;
+  };
+  stats: {
+    enabled: boolean;
+    file: string;
+    /** 접속자 수 브로드캐스트 주기. 값이 바뀌었을 때만 보낸다. */
+    onlineIntervalMs: number;
+    flushIntervalMs: number;
+    maxNames: number;
+    recentSize: number;
+    retentionHours: number;
   };
   nickname: { maxLength: number; fallback: string };
   rateLimit: { points: number; durationSeconds: number; blockSeconds: number };
@@ -108,6 +129,7 @@ export const config: AppConfig = {
   port: readInt("PORT", 8080, { min: 0, max: 65535 }),
 
   logLevel: readString("LOG_LEVEL", "info"),
+  timeZone: SERVICE_TIME_ZONE,
 
   publicDir: path.join(ROOT, "public"),
   stateFile: readString("STATE_FILE", path.join(ROOT, "data", "state.json")),
@@ -126,14 +148,25 @@ export const config: AppConfig = {
   device: {
     mode: readEnum("DEVICE_MODE", DEVICE_MODES, "auto"),
     winterMonths: readMonths("WINTER_MONTHS", [11, 12, 1, 2, 3]),
-    // 미설정이면 서버 프로세스의 로컬 시간대. 컨테이너는 대개 UTC이므로
-    // 서비스 지역이 뚜렷하다면 명시하는 편이 낫다 (예: Asia/Seoul).
-    timeZone: readTimeZone("SEASON_TIMEZONE"),
+    timeZone: SERVICE_TIME_ZONE,
     // 계절이 바뀌는 순간에도 서버가 켜져 있을 수 있으므로 주기적으로 다시 본다.
     recheckIntervalMs: readInt("DEVICE_RECHECK_INTERVAL_MS", 3_600_000, {
       min: 1000,
       max: 86_400_000,
     }),
+  },
+
+  // 통계는 전부 메모리에서 집계하고 SQLite에는 주기적으로 백업만 한다.
+  // 끄면 순위/기록/그래프가 비어 보이고, 접속자 수만 계속 동작한다.
+  stats: {
+    enabled: readBool("STATS_ENABLED", true),
+    file: readString("STATS_FILE", path.join(ROOT, "data", "stats.db")),
+    onlineIntervalMs: readInt("STATS_ONLINE_INTERVAL_MS", 5000, { min: 1000, max: 60_000 }),
+    flushIntervalMs: readInt("STATS_FLUSH_INTERVAL_MS", 5000, { min: 500, max: 300_000 }),
+    // 닉네임에 인증이 없어 무한히 늘 수 있다. 넘으면 상위만 남긴다.
+    maxNames: readInt("STATS_MAX_NAMES", 2000, { min: 100, max: 100_000 }),
+    recentSize: readInt("STATS_RECENT_SIZE", 500, { min: 10, max: 10_000 }),
+    retentionHours: readInt("STATS_RETENTION_HOURS", 48, { min: 24, max: 8760 }),
   },
 
   nickname: {

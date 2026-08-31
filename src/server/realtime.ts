@@ -11,6 +11,7 @@ import { resolveClientIp } from "./client-ip.ts";
 import type { AppConfig } from "./config.ts";
 import { describeDevice } from "./device.ts";
 import { normalizeNickname } from "./nickname.ts";
+import type { StatsStore } from "./stats-store.ts";
 import type { Thermostat } from "./thermostat.ts";
 
 export type RealtimeLogger = {
@@ -23,11 +24,14 @@ export type RealtimeDeps = {
   thermostat: Thermostat;
   config: AppConfig;
   logger: RealtimeLogger;
+  stats?: StatsStore | undefined;
   onChange?: ((temp: number) => void) | undefined;
 };
 
 export type RealtimeHandle = {
   readonly device: DeviceInfo;
+  /** 지금 붙어 있는 클라이언트 수. */
+  readonly online: number;
   stop: () => void;
 };
 
@@ -36,7 +40,7 @@ export type AppSocketServer = SocketIOServer<ClientToServerEvents, ServerToClien
 /** socket.io 이벤트 핸들러를 등록한다. */
 export function registerRealtime(
   io: AppSocketServer,
-  { thermostat, config, logger, onChange }: RealtimeDeps,
+  { thermostat, config, logger, stats, onChange }: RealtimeDeps,
 ): RealtimeHandle {
   const limiter = new RateLimiterMemory({
     points: config.rateLimit.points,
@@ -73,6 +77,18 @@ export function registerRealtime(
     io.emit("deviceChange", device);
   }, config.device.recheckIntervalMs);
   seasonTimer.unref?.();
+
+  // 접속자 수는 socket.io가 이미 세고 있으므로 계산 비용이 없다. 다만
+  // 접속/해제마다 브로드캐스트하면 N명 있을 때 1명 들어올 때마다 N개를 보내게
+  // 되어 트래픽이 몰릴 때 O(N^2)가 된다. 주기적으로, 값이 달라졌을 때만 보낸다.
+  let lastOnline = -1;
+  const onlineTimer = setInterval(() => {
+    const online = io.engine.clientsCount;
+    if (online === lastOnline) return;
+    lastOnline = online;
+    io.emit("onlineCount", { online });
+  }, config.stats.onlineIntervalMs);
+  onlineTimer.unref?.();
 
   io.on("connection", (socket) => {
     // 핸드셰이크는 연결당 한 번만 해석하면 된다.
@@ -128,15 +144,14 @@ export function registerRealtime(
       // 3) 상태 변경 및 브로드캐스트. 경계값에서 눌러 값이 그대로여도
       //    "누가 눌렀다"는 사실은 알려야 하므로 changed 플래그를 함께 보낸다.
       const { temp, changed } = thermostat.step(direction);
-      io.emit("tempChange", {
-        temp,
-        changed,
-        direction,
-        username,
-        at: Date.now(),
-      });
+      const at = Date.now();
+      io.emit("tempChange", { temp, changed, direction, username, at });
 
-      if (changed) onChange?.(temp);
+      if (changed) {
+        onChange?.(temp);
+        // 실제로 값이 바뀐 것만 센다. 경계값에서 연타해 순위를 올리는 것을 막는다.
+        stats?.record({ username, direction, temp, at });
+      }
     }
   });
 
@@ -144,8 +159,12 @@ export function registerRealtime(
     get device() {
       return device;
     },
+    get online() {
+      return io.engine.clientsCount;
+    },
     stop() {
       clearInterval(seasonTimer);
+      clearInterval(onlineTimer);
     },
   };
 }

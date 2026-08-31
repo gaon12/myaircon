@@ -16,6 +16,8 @@ import {
  * 다른 쪽을 잊는 일이 구조적으로 불가능하다.
  */
 
+import type { OnlineCountMessage } from "./stats.ts";
+
 export const DEVICE_KINDS = ["aircon", "heater"] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 
@@ -114,6 +116,7 @@ export const localeCodeListSchema = arrayOf(string({ minLength: 2 }));
 /** socket.io 이벤트 이름과 페이로드 타입의 대응 */
 export type ServerToClientEvents = {
   init: (message: InitMessage) => void;
+  onlineCount: (message: OnlineCountMessage) => void;
   tempChange: (message: TempChangeMessage) => void;
   blocked: (message: BlockedMessage) => void;
   deviceChange: (message: DeviceChangeMessage) => void;
