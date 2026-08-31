@@ -4,7 +4,7 @@
 Web Audio API로 만든 브라운 노이즈가 온도에 따라 음량을 바꾼다.
 겨울에는 에어컨 대신 **온풍기**가 뜬다.
 
-한국어 · English · 日本語 · 简体中文 · 繁體中文 · 라이트/다크 · 반응형
+한국어 · English · 日本語 · 简体中文 · 繁體中文 · 라이트/다크 · 반응형 · 실시간 통계
 
 [codingapple1/myaircon.online](https://github.com/codingapple1/myaircon.online)의 fork다.
 원본은 서비스가 종료됐고, 이 저장소는 재오픈을 위해 런타임과 의존성을 최신으로
@@ -65,7 +65,8 @@ npm run dev
 | `TRUST_PROXY_HOPS` | `0` | 신뢰하는 리버스 프록시 홉 수 (아래 참고) |
 | `DEVICE_MODE` | `auto` | `auto` / `aircon` / `heater` (아래 참고) |
 | `WINTER_MONTHS` | `11,12,1,2,3` | 온풍기로 취급할 월 |
-| `SEASON_TIMEZONE` | (서버 로컬) | 계절 판정에 쓸 IANA 시간대 |
+| `SERVICE_TIMEZONE` | (서버 로컬) | 계절 판정과 통계 "오늘"의 IANA 시간대 |
+| `STATS_ENABLED` | `true` | 순위·기록·활동 그래프 수집 |
 | `TEMP_MIN` / `TEMP_MAX` | `18` / `30` | 온도 범위 |
 | `PERSIST_STATE` | `true` | 공유 온도를 디스크에 저장할지 |
 | `RATE_LIMIT_POINTS` | `10` | `RATE_LIMIT_DURATION_SECONDS`(기본 2초)당 허용 횟수 |
@@ -86,10 +87,11 @@ npm run dev
 달라지면 안 되기 때문이다.
 
 기본값은 서버 프로세스의 로컬 시간대인데, 대부분의 컨테이너는 UTC라 배포
-환경에 따라 결과가 달라진다. `SEASON_TIMEZONE=Asia/Seoul` 처럼 명시하면
+환경에 따라 결과가 달라진다. `SERVICE_TIMEZONE=Asia/Seoul` 처럼 명시하면
 어디에 배포하든 같은 기준으로 판정한다 (잘못된 이름은 부팅 시점에 거부된다).
 예를 들어 `2026-10-31 15:30 UTC`는 UTC로 보면 10월(에어컨), `Asia/Seoul`로
-보면 11월(온풍기)이다.
+보면 11월(온풍기)이다. 같은 설정이 통계의 "오늘" 경계도 정한다.
+(예전 이름 `SEASON_TIMEZONE`도 계속 받는다.)
 서버가 몇 달씩 떠 있을 수 있으므로 부팅 때 한 번 정하고 끝내지 않고, 1시간마다
 (`DEVICE_RECHECK_INTERVAL_MS`) 다시 확인해 바뀌면 접속 중인 클라이언트에
 `deviceChange`를 보낸다.
@@ -140,16 +142,18 @@ pm2 start npm --name myaircon -- start
 
 `SIGTERM`/`SIGINT`를 받으면 열린 소켓을 정리하고 마지막 온도를 저장한 뒤 종료한다.
 
-### 헬스체크
+### HTTP 엔드포인트
 
 ```
-GET /healthz  ->  {"status":"ok","temp":18,"min":18,"max":30,"device":"aircon","uptimeSeconds":42}
+GET /healthz    ->  {"status":"ok","temp":18,"min":18,"max":30,"device":"aircon","uptimeSeconds":42}
+GET /api/stats  ->  {"online":3,"today":[...],"allTime":[...],"recent":[...],"hourly":[...],"at":...}
 ```
 
 ### 상태 파일
 
-공유 온도는 `data/state.json`(`STATE_FILE`)에 저장되어 재시작 후에도 이어진다.
-컨테이너로 배포한다면 이 경로를 볼륨으로 잡거나 `PERSIST_STATE=false`로 끈다.
+공유 온도는 `data/state.json`(`STATE_FILE`), 통계는 `data/stats.db`(`STATS_FILE`)에
+저장되어 재시작 후에도 이어진다. 컨테이너로 배포한다면 `data/`를 볼륨으로 잡거나
+`PERSIST_STATE=false` / `STATS_ENABLED=false`로 끈다.
 
 ## 다국어
 
@@ -200,9 +204,11 @@ src/
   shared/         서버와 클라이언트가 함께 쓰는 것
     validate.ts   런타임 검증 유틸 (의존성 0)
     protocol.ts   와이어 메시지 스키마 + 타입
+    stats.ts      통계 응답 스키마 + 타입
   server/
     config.ts       환경변수 기반 설정 (부팅 시점 검증)
     device.ts       계절에 따른 기기 종류 판정과 이미지 경로 해석
+    stats-store.ts  통계 집계(메모리) + SQLite 백업
     thermostat.ts   공유 온도값. I/O 없는 순수 로직
     nickname.ts     신뢰할 수 없는 닉네임 입력 정규화
     client-ip.ts    rate limit 키가 될 클라이언트 주소 해석
@@ -218,6 +224,7 @@ src/
     worklet.ts    AudioWorkletProcessor + 순수 DSP
     storage.ts    localStorage 래퍼
     theme.ts      라이트/다크 테마
+    stats.ts      통계 화면(순위·최근 기록·활동 그래프)
     i18n/         로케일 등록, BCP-47 협상, Locale 계약
 public/
   index.html      마크업 (인라인 script/style 없음)
@@ -277,6 +284,52 @@ zod 대신 직접 만든 이유는 클라이언트에 번들러가 없기 때문
 `tsc`가 뱉은 ESM을 그대로 서빙하므로, 의존성을 하나 추가하면 그 패키지의 브라우저
 빌드까지 따로 서빙해야 한다.
 
+## 통계
+
+Stats 다이얼로그에서 볼 수 있다.
+
+- **현재 접속자 수** — 온라인 모드일 때 푸터에도 표시
+- **많이 바꾼 사람** — 오늘 / 역대 상위 10명
+- **최근 24시간 활동** — 시간당 조절 횟수 막대 그래프
+- **최근 기록** — 마지막 50건
+- **내 기록** — 이 브라우저에서 누른 횟수(localStorage)
+
+### 부하를 어떻게 피했나
+
+이 앱의 원래 최대 비용은 이미 브로드캐스트다. 버튼 한 번에 접속자 전원에게
+`tempChange`를 보내므로 접속자 1,000명 × 누르는 사람 10명이면 초당 10,000
+메시지다. 통계를 여기에 얹으면 안 된다.
+
+| 데이터 | 저장 위치 | 조회 |
+| --- | --- | --- |
+| 이름별 횟수 (오늘/역대) | 메모리 + SQLite 주기 백업 | pull |
+| 시간대별 롤업 | 메모리 + SQLite (하루 24행) | pull |
+| 최근 기록 | 메모리 링버퍼 500건 (40KB) | pull |
+| 접속자 수 | socket.io 내장 카운터 | push (5초 주기, 변할 때만) |
+
+- **집계는 전부 메모리에서** 한다. 조회가 와도 SQL을 돌지 않는다.
+  SQLite(`node:sqlite`, 의존성 0)는 재시작 대비 백업일 뿐이고 5초마다
+  배치 커밋한다.
+- **통계는 밀지 않고 가져간다.** 다이얼로그를 여는 순간 `GET /api/stats`
+  한 번. 버튼마다 `O(접속자 수)`이던 것이 `O(1)`이 된다.
+- **모든 이벤트를 영구 저장하지 않는다.** rate limit 상한 기준 활성 IP
+  100개면 하루 3.2GB다. 누계와 롤업으로 같은 화면을 만든다.
+
+### 알아둘 것
+
+- **순위는 사람이 아니라 이름 기준이다.** 닉네임에 인증도 유일성도 없다.
+  화면에도 그렇게 적어 두었고, 그래서 "오늘" 탭을 함께 둔다 — 하루면 리셋되니
+  한 번 굳은 순위가 영원히 고정되지 않는다.
+- **집계에 상한이 있다.** 스크립트가 매번 다른 닉네임을 보내면 메모리가
+  무한히 자란다(실측: 100만 항목 58MB). `STATS_MAX_NAMES`(기본 2000)를 넘으면
+  상위 500개만 남긴다.
+- **실제로 온도가 바뀐 것만 센다.** 30도에서 `+`를 연타해 순위를 올리는
+  경로를 막는다.
+- **최근 기록은 재시작하면 비워진다.** 메모리 링버퍼이고 "최근"은 본래
+  휘발성이라고 봤다. 순위와 활동 그래프는 남는다.
+- 집계는 프로세스 로컬이다. 인스턴스를 2개 이상으로 늘리면 통계가 갈라진다
+  (rate limit도 이미 같은 제약이 있다).
+
 ## 실시간 프로토콜
 
 | 방향 | 이벤트 | 페이로드 |
@@ -286,6 +339,7 @@ zod 대신 직접 만든 이유는 클라이언트에 번들러가 없기 때문
 | 서버 → 전체 | `tempChange` | `{ temp, changed, direction, username, at }` |
 | 서버 → 클라 | `blocked` | `{ reason, retryAfterMs }` |
 | 서버 → 클라 | `deviceChange` | `{ kind, assets, usingFallback }` — 계절이 바뀌었을 때 |
+| 서버 → 클라 | `onlineCount` | `{ online }` — 접속자 수가 변했을 때 (5초 주기) |
 | 서버 → 클라 | `server-error` | `{ reason }` |
 
 온도 범위와 기기 종류를 서버가 내려주므로 클라이언트는 `18`/`30`도 이미지 경로도
