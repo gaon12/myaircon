@@ -504,7 +504,7 @@ puppeteer, Selenium, Playwright 같은 도구가 남기는 흔적을 본다.
 | 흔적 | 무엇을 보는가 | 출처 |
 |---|---|---|
 | `webdriver` | `navigator.webdriver === true` | 클라이언트 |
-| `selenium` | `document.$cdc_…`, `__webdriver_*`, `<html webdriver>` | 클라이언트 |
+| `selenium` | `window.cdc_…`, `$cdc_…`, `__webdriver_*`, `<html webdriver>` | 클라이언트 |
 | `playwright` | `window.__playwright*`, `__pw_*` | 클라이언트 |
 | `puppeteer` | `window.__puppeteer_*` | 클라이언트 |
 | `legacy-harness` | `_phantom`, `callPhantom`, `__nightmare`, `domAutomationController` | 클라이언트 |
@@ -525,12 +525,72 @@ puppeteer, Selenium, Playwright 같은 도구가 남기는 흔적을 본다.
 `GUARD_AUTOMATION_ACTION=challenge|block`으로 열어 두었다.
 끄려면 `GUARD_AUTOMATION_POINTS=0`.
 
-> **실측.** 헤드리스 Edge 152를 `--remote-debugging-port`로만 띄우면
-> `navigator.webdriver`가 `false`라 `headless-ua` 하나만 잡힌다.
-> `--enable-automation`을 붙이면 `["webdriver", "headless-ua"]`가 된다.
-> 기본 설정의 Selenium/puppeteer는 후자에 해당한다. 다시 말해 **숨기려는
-> 쪽은 이미 첫 번째 줄에서 절반쯤 빠져나간다.** 이 기능의 한계를 정확히
-> 보여주는 숫자라 적어 둔다.
+#### 실제로 붙여 본 결과
+
+세 도구로 이 앱에 직접 접속해서 받아 적은 것이다. Edge 152, puppeteer-core
+25.9.0, playwright-core 1.62.1, selenium-webdriver 4.48.0. 도구마다 서버를
+새로 띄웠다 — 점수는 IP 단위로 쌓이므로 그러지 않으면 뒤에 도는 도구가
+자기 흔적이 아니라 앞사람 누적 때문에 걸린다.
+
+| 붙인 방법 | `navigator.webdriver` | UA | 잡힌 흔적 |
+|---|---|---|---|
+| Edge, CDP로 붙기만 (headed) | `false` | `Chrome/152` | (없음) |
+| Edge, CDP로 붙기만 (headless) | `false` | `HeadlessChrome/152` | `headless-ua` |
+| Edge + `--enable-automation` | `true` | `HeadlessChrome/152` | `webdriver`, `headless-ua` |
+| puppeteer (headed) | `true` | `Chrome/152` | `webdriver` |
+| puppeteer (headless) | `true` | `HeadlessChrome/152` | `webdriver`, `headless-ua` |
+| Playwright (headed) | `true` | `Chrome/152` | `webdriver` |
+| Playwright (headless) | `true` | `HeadlessChrome/152` | `webdriver`, `headless-ua` |
+| Selenium (headed) | `true` | `Chrome/152` | `webdriver`, `selenium` |
+| Selenium (headless) | `true` | `HeadlessChrome/152` | `webdriver`, `headless-ua`, `selenium` |
+| 위장한 puppeteer (아래) | `undefined` | `Chrome/152` | **(없음)** |
+
+읽을 것이 네 가지 있다.
+
+**1. `navigator.webdriver` 하나가 사실상 전부다.** 세 도구 전부 headed에서도
+`true`다. 반대로 순정 Edge는 CDP로 붙어 있어도 `false`다. 즉 이 한 줄이
+"디버깅 중인 브라우저"와 "드라이버가 모는 브라우저"를 가른다. 나머지 흔적은
+덤이다.
+
+**2. `--enable-automation`을 빼도 소용없다.** 흔히 도는 우회법인데, puppeteer에서
+그 인자를 지우고 띄워도 `navigator.webdriver`는 그대로 `true`였다. 인자가 정말
+빠졌는지는 `Browser.getBrowserCommandLine`이 *"--enable-automation not set"*
+이라며 거절하는 것으로 확인했다. 무엇이 대신 켜는지는 끝내 특정하지 못했다.
+puppeteer가 보내는 CDP 26개를 손으로 재현해도, 인자 전체를 그대로 붙여 띄워도
+`false`였다(`Emulation.setAutomationOverride`를 직접 부르면 `true`가 되지만
+puppeteer는 그걸 보내지 않는다). 확실한 것은 **인자를 지우는 우회법이 더는
+통하지 않는다**는 사실뿐이다.
+
+**3. ChromeDriver의 표식은 문서와 다른 곳에 있었다.** 자료란 자료는 전부
+"`document`에 붙는 `$cdc_...`"라고 적고 있는데, 실제로는 `$` 없이 **`window`**에
+일곱 개가 붙는다 (`cdc_adoQpoasnfa76pfcZLmcfl_{Array,Object,Promise,Proxy,
+Symbol,JSON,Window}`). `document`에는 하나도 없었고, `<html webdriver>` 속성도
+붙지 않았다. 그래서 처음 만든 탐지기는 Selenium을 붙여도 `selenium` 흔적을
+한 번도 내지 못했다 — `webdriver`로만 걸리고 있었다. 붙여 보지 않았으면
+몰랐을 버그다. 지금은 양쪽에서 `$`를 선택으로 두고 본다.
+
+**4. 그리고 여섯 줄이면 전부 사라진다.**
+
+```js
+const ua = (await browser.userAgent()).replace("HeadlessChrome", "Chrome");
+await page.setUserAgent(ua);
+await page.evaluateOnNewDocument(() => {
+  Object.defineProperty(Navigator.prototype, "webdriver", { get: () => undefined });
+  for (const k of Object.getOwnPropertyNames(window)) if (k.startsWith("cdc_")) delete window[k];
+});
+```
+
+이걸 붙인 puppeteer는 흔적이 **하나도** 잡히지 않는다. 스텔스 플러그인도
+아니고 우리 탐지기가 읽는 자리만 정확히 덮은 여섯 줄이다. 그러니 이 기능을
+"자동화 차단"으로 읽으면 안 된다. **숨길 생각이 있는 쪽은 첫 줄에서 빠져나간다.**
+남는 값은 숨길 생각이 없는 트래픽에 비용을 붙이는 것뿐이고, 기본값이 차단이
+아니라 점수 가산인 이유다.
+
+> 비브라우저 클라이언트도 같이 재 봤다. `curl`, `python-requests`, `Scrapy`,
+> `node-fetch`는 `tool-ua`로 잡히고, Googlebot UA와 UA 없음은 일부러 잡지
+> 않는다. `score`에서는 전부 접속되고, `challenge`로 올리면 전부
+> `challenge_required`, `block`이면 `blocked`으로 거절된다 — 작업증명을 풀
+> 자바스크립트 엔진이 없기 때문이다. 이 정책이 실제로 막는 것은 딱 여기까지다.
 
 의심 점수의 상한이 30이므로, `GUARD_AUTOMATION_POINTS`를 최대치인 30으로
 두어도 흔적만으로는 챌린지 기준인 50에 닿지 않는다. 설계된 대로다 —
