@@ -3,10 +3,14 @@ import path from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { Server as SocketIOServer } from "socket.io";
+import { verifyRequestSchema } from "../shared/challenge.ts";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/protocol.ts";
 import { registerAdmin } from "./admin.ts";
 import { BanStore } from "./ban-store.ts";
+import { ChallengeIssuer } from "./challenge.ts";
+import { resolveClientIp } from "./client-ip.ts";
 import { type AppConfig, config as defaultConfig } from "./config.ts";
+import { Guard } from "./guard.ts";
 import { createIdentityTagger, generateIdentitySecret } from "./identity.ts";
 import { type AppSocketServer, type RealtimeHandle, registerRealtime } from "./realtime.ts";
 import { StateStore } from "./state-store.ts";
@@ -20,6 +24,18 @@ const socketIoClientDist = path.join(
   path.dirname(createRequire(import.meta.url).resolve("socket.io-client/package.json")),
   "dist",
 );
+
+/** Fastify 요청에서 rate limit 키로 쓸 주소. 소켓 쪽과 같은 규칙을 쓴다. */
+function makeClientIpOf(config: AppConfig) {
+  return (request: {
+    ip: string;
+    headers: Record<string, string | string[] | undefined>;
+  }): string =>
+    resolveClientIp(
+      { address: request.ip, headers: request.headers },
+      { trustProxyHops: config.trustProxyHops },
+    );
+}
 
 export type BuildAppOptions = {
   config?: AppConfig | undefined;
@@ -36,6 +52,8 @@ export type AppContext = {
   config: AppConfig;
   realtime: RealtimeHandle;
   bans: BanStore;
+  guard: Guard;
+  challenge: ChallengeIssuer;
 };
 
 /**
@@ -80,6 +98,9 @@ export async function buildApp({
     logger: app.log,
   });
 
+  const guard = new Guard(config.guard);
+  const clientIpOf = makeClientIpOf(config);
+
   const bans = new BanStore({
     file: config.admin.banFile,
     // 관리 API가 꺼져 있으면 차단을 걸 수단도 없으므로 저장소를 열지 않는다.
@@ -91,6 +112,15 @@ export async function buildApp({
   // 한 번 만들어 저장해 두고 다음 부팅부터 재사용한다.
   const identitySecret = resolveIdentitySecret(config, stats, app.log);
   const tagger = createIdentityTagger(identitySecret);
+
+  // 챌린지 서명에도 같은 비밀키를 쓴다. 둘 다 "이 서버가 발급했음"만 증명하면
+  // 되고, 별도 키를 하나 더 관리할 이유가 없다.
+  const challenge = new ChallengeIssuer({
+    secret: identitySecret,
+    difficulty: config.challenge.difficulty,
+    ttlSeconds: config.challenge.ttlSeconds,
+    tokenTtlSeconds: config.challenge.tokenTtlSeconds,
+  });
 
   const saved = await store.load();
   if (saved !== null) {
@@ -117,6 +147,18 @@ export async function buildApp({
       );
     }
   });
+
+  // HTTP 요청 rate limit. 앞단 프록시가 양을 막아주더라도, 프록시가 없거나
+  // 설정이 빠졌을 때 서버가 알몸이 되지 않도록 한 겹 둔다.
+  // 정적 파일까지 포함해 IP당 분당 한도를 건다.
+  if (config.guard.enabled) {
+    app.addHook("onRequest", async (request, reply) => {
+      const ip = clientIpOf(request);
+      if (await guard.allowHttpRequest(ip)) return;
+      reply.header("Retry-After", "60");
+      await reply.code(429).send({ error: "too_many_requests" });
+    });
+  }
 
   await app.register(fastifyStatic, {
     root: config.publicDir,
@@ -159,10 +201,27 @@ export async function buildApp({
     stats,
     tagger,
     bans,
+    guard,
+    challenge,
     onChange: (temp) => store.schedule({ temp }),
   });
 
-  registerAdmin(app, { config, realtime, bans, tagger });
+  // 점수가 애매한 클라이언트에게 내줄 챌린지. 페이지 자체는 막지 않는다.
+  app.get("/api/challenge", async () => challenge.issue());
+
+  app.post("/api/verify", async (request, reply) => {
+    const parsed = verifyRequestSchema.parse(request.body, "body");
+    if (!parsed.ok) return reply.code(400).send({ error: parsed.error });
+
+    const token = challenge.verify(parsed.value);
+    if (token === null) {
+      guard.noteSuspicious(clientIpOf(request), 5);
+      return reply.code(400).send({ error: "invalid_solution" });
+    }
+    return { token };
+  });
+
+  registerAdmin(app, { config, realtime, bans, tagger, guard });
 
   // realtime이 기기 종류를 들고 있으므로 그 뒤에 등록한다.
   app.get("/healthz", async () => ({
@@ -183,7 +242,7 @@ export async function buildApp({
     return stats.snapshot(realtime.online);
   });
 
-  return { app, io, thermostat, store, stats, config, realtime, bans };
+  return { app, io, thermostat, store, stats, config, realtime, bans, guard, challenge };
 }
 
 /**

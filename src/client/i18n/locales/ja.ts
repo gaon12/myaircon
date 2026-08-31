@@ -59,6 +59,12 @@ export default {
   timeMinutes: (count: number) => `${count}分前`,
   timeHours: (count: number) => `${count}時間前`,
   statsError: "統計を読み込めませんでした",
+  verifyTitle: "確認が必要です",
+  verifyBody: "自動接続でないことを確認しています。少々お待ちください。",
+  verifyProgress: (attempts: number) => `確認中… (${attempts.toLocaleString()}回試行)`,
+  verifyFailed: "確認に失敗しました。もう一度お試しください",
+  verifyRetry: "再試行",
+  connectionBlocked: "接続が制限されています。しばらくしてからお試しください",
   aboutLines: (device) => [
     "集中とリラックスのためのブラウンノイズ・ジェネレーターです。",
     `オンラインモードをオンにすると、接続中の全員で${device}を1台共有します（節電）。`,

@@ -1,0 +1,102 @@
+# myaircon - Apache 리버스 프록시 예시
+#
+# 역할 분담은 nginx.conf.example과 같다.
+#   Apache : 양(volume) - 연결 수, 요청 속도, TLS, 느린 클라이언트
+#   Node   : 의미(semantics) - IP당 소켓 수, 관리 토큰 시도, 버튼 연타
+#
+# 필요한 모듈
+#   a2enmod proxy proxy_http proxy_wstunnel rewrite headers ssl deflate
+#   a2enmod reqtimeout
+#   # 속도 제한은 기본 모듈이 아니다. 둘 중 하나를 쓴다.
+#   #   mod_ratelimit  - 대역폭 제한(요청 수 제한이 아니다)
+#   #   mod_qos 또는 mod_evasive - 요청/연결 수 제한
+#   a2enmod evasive20        # 패키지: libapache2-mod-evasive
+#
+# 이 파일을 그대로 쓰지 말고 도메인, 인증서 경로, 한도를 환경에 맞게 고칠 것.
+
+<VirtualHost *:80>
+    ServerName myaircon.example
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [R=301,L]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName myaircon.example
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/myaircon.example/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/myaircon.example/privkey.pem
+    SSLProtocol -all +TLSv1.2 +TLSv1.3
+
+    # HSTS는 여기서 켠다. 앱의 HSTS_MAX_AGE와 중복해서 켜지 말 것.
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # 느린 클라이언트(slowloris) 대비.
+    RequestReadTimeout header=10-20,MinRate=500 body=10,MinRate=500
+    LimitRequestBody 16384
+
+    # 요청 폭주 대비 (mod_evasive). 임계값은 트래픽을 보고 조정할 것.
+    <IfModule mod_evasive20.c>
+        DOSHashTableSize 3097
+        DOSPageCount     20      # 같은 페이지를 DOSPageInterval 초 안에 이만큼
+        DOSPageInterval  1
+        DOSSiteCount     100     # 같은 사이트를 DOSSiteInterval 초 안에 이만큼
+        DOSSiteInterval  1
+        DOSBlockingPeriod 60
+    </IfModule>
+
+    <IfModule mod_deflate.c>
+        AddOutputFilterByType DEFLATE text/css application/javascript application/json image/svg+xml
+    </IfModule>
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    RequestHeader set X-Forwarded-Proto "https"
+    # mod_proxy_http가 X-Forwarded-For를 자동으로 붙인다.
+
+    # ------------------------------------------------------------ WebSocket
+    # 이 두 줄이 없으면 socket.io가 polling으로만 붙거나 실패한다.
+    # Upgrade 헤더가 있는 요청만 ws:// 로 넘긴다.
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/?(.*) "ws://127.0.0.1:8080/$1" [P,L]
+
+    # WebSocket은 오래 열려 있다. 기본 타임아웃으로 두면 조용히 끊긴다.
+    ProxyPass        /socket.io/ http://127.0.0.1:8080/socket.io/ timeout=604800 keepalive=On
+    ProxyPassReverse /socket.io/ http://127.0.0.1:8080/socket.io/
+
+    # ------------------------------------------------------------ 관리
+    # 인증은 앱의 ADMIN_TOKEN이 하지만, 네트워크 단에서 한 번 더 좁히면 좋다.
+    <Location "/api/admin/">
+        # Require ip 203.0.113.0/24
+        Require all granted
+    </Location>
+    <Location "/admin.html">
+        # Require ip 203.0.113.0/24
+        Require all granted
+    </Location>
+
+    # ------------------------------------------------------------ 그 외
+    ProxyPass        / http://127.0.0.1:8080/ timeout=60 keepalive=On
+    ProxyPassReverse / http://127.0.0.1:8080/
+
+    ErrorLog  ${APACHE_LOG_DIR}/myaircon-error.log
+    CustomLog ${APACHE_LOG_DIR}/myaircon-access.log combined
+</VirtualHost>
+
+# ---------------------------------------------------------------- 앱 설정
+#
+# 이 구성이라면 프록시가 한 단이므로 앱에 다음을 준다.
+#
+#   TRUST_PROXY_HOPS=1
+#
+# 이 값이 틀리면 rate limit과 차단이 엉뚱한 대상에게 걸린다.
+#   0으로 두면  -> 모든 사용자가 Apache의 주소 하나를 공유해 한 버킷에 갇힌다
+#   1인데 프록시가 없으면 -> 클라이언트가 X-Forwarded-For를 위조해 제한을 우회한다
+# CDN을 앞에 하나 더 두면 2다.
+#
+# HSTS를 Apache에서 켰으므로 앱에서는 끈다(기본값 0).
+#   HSTS_MAX_AGE=0

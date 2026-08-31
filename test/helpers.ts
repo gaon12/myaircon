@@ -18,7 +18,9 @@ type NestedKey =
   | "security"
   | "device"
   | "stats"
-  | "admin";
+  | "admin"
+  | "guard"
+  | "challenge";
 
 function mergeConfig(base: AppConfig, overrides: ConfigOverrides): AppConfig {
   return {
@@ -32,6 +34,8 @@ function mergeConfig(base: AppConfig, overrides: ConfigOverrides): AppConfig {
     // 테스트는 기본적으로 디스크를 쓰지 않는다.
     stats: { ...base.stats, file: ":memory:", ...overrides.stats },
     admin: { ...base.admin, banFile: ":memory:", ...overrides.admin },
+    guard: { ...base.guard, ...overrides.guard },
+    challenge: { ...base.challenge, ...overrides.challenge },
   };
 }
 

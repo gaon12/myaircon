@@ -1,6 +1,7 @@
 import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
 import type { Server as SocketIOServer } from "socket.io";
 import type { SessionInfo } from "../shared/admin.ts";
+import { CHALLENGE_REQUIRED, CONNECTION_BLOCKED } from "../shared/challenge.ts";
 import type {
   ClientToServerEvents,
   DeviceInfo,
@@ -9,9 +10,11 @@ import type {
   ServerToClientEvents,
 } from "../shared/protocol.ts";
 import type { BanStore } from "./ban-store.ts";
+import type { ChallengeIssuer } from "./challenge.ts";
 import { resolveClientIp } from "./client-ip.ts";
 import type { AppConfig } from "./config.ts";
 import { describeDevice } from "./device.ts";
+import type { Guard } from "./guard.ts";
 import type { IdentityTagger } from "./identity.ts";
 import { normalizeNickname } from "./nickname.ts";
 import type { StatsStore } from "./stats-store.ts";
@@ -32,6 +35,10 @@ export type RealtimeDeps = {
   tagger?: IdentityTagger | undefined;
   /** 차단 목록. 없으면 아무도 막지 않는다. */
   bans?: BanStore | undefined;
+  /** 행동 점수. 없으면 판정하지 않는다. */
+  guard?: Guard | undefined;
+  /** 챌린지 발급기. guard가 challenge 판정을 냈을 때 쓴다. */
+  challenge?: ChallengeIssuer | undefined;
   onChange?: ((temp: number) => void) | undefined;
 };
 
@@ -51,7 +58,7 @@ export type AppSocketServer = SocketIOServer<ClientToServerEvents, ServerToClien
 /** socket.io 이벤트 핸들러를 등록한다. */
 export function registerRealtime(
   io: AppSocketServer,
-  { thermostat, config, logger, stats, tagger, bans, onChange }: RealtimeDeps,
+  { thermostat, config, logger, stats, tagger, bans, guard, challenge, onChange }: RealtimeDeps,
 ): RealtimeHandle {
   const limiter = new RateLimiterMemory({
     points: config.rateLimit.points,
@@ -108,17 +115,59 @@ export function registerRealtime(
   /** socketId -> 연결 정보. 관리 화면과 kick이 쓴다. */
   const sessions = new Map<string, MutableSession>();
 
-  // 차단된 주소는 핸드셰이크 단계에서 막는다. 연결을 맺고 끊는 것보다 싸고,
-  // 클라이언트에는 접속 실패로 보인다.
+  // 연결을 받아들일지는 핸드셰이크 단계에서 정한다. 연결을 맺고 끊는 것보다
+  // 싸고, 클라이언트에는 접속 실패로 보인다.
+  //
+  // 순서가 중요하다.
+  //   1) 명시적 차단(관리자가 내린 것)  -> 무조건 거부
+  //   2) 핸드셰이크 빈도               -> 재접속 폭주 차단
+  //   3) 행동 점수                     -> allow / challenge / block
+  //   4) 동시 연결 수                  -> 한 주소가 소켓을 독차지하지 못하게
   io.use((socket, next) => {
-    const ip = resolveClientIp(socket.handshake, { trustProxyHops: config.trustProxyHops });
-    const ban = bans?.find(ip) ?? null;
-    if (ban === null) {
+    void (async () => {
+      const ip = resolveClientIp(socket.handshake, { trustProxyHops: config.trustProxyHops });
+
+      const ban = bans?.find(ip) ?? null;
+      if (ban !== null) {
+        logger.info({ ip, until: ban.until }, "rejected banned client");
+        next(new Error(CONNECTION_BLOCKED));
+        return;
+      }
+
+      if (guard !== undefined) {
+        if (!(await guard.allowHandshake(ip))) {
+          logger.info({ ip }, "rejected handshake flood");
+          next(new Error(CONNECTION_BLOCKED));
+          return;
+        }
+
+        const score = await guard.score(ip);
+        if (score.verdict === "block") {
+          logger.warn({ ip, score }, "blocked by behaviour score");
+          next(new Error(CONNECTION_BLOCKED));
+          return;
+        }
+        if (score.verdict === "challenge") {
+          // 이미 챌린지를 통과한 토큰을 가져왔으면 통과시킨다.
+          const token = (socket.handshake.auth as { challengeToken?: unknown } | undefined)
+            ?.challengeToken;
+          if (challenge === undefined || !challenge.isTokenValid(token)) {
+            logger.info({ ip, score }, "challenge required");
+            next(new Error(CHALLENGE_REQUIRED));
+            return;
+          }
+        }
+
+        if (!guard.openSocket(ip)) {
+          logger.info({ ip, sockets: guard.concurrentSockets(ip) }, "too many sockets from one ip");
+          next(new Error(CONNECTION_BLOCKED));
+          return;
+        }
+        socket.once("disconnect", () => guard.closeSocket(ip));
+      }
+
       next();
-      return;
-    }
-    logger.info({ ip, until: ban.until }, "rejected banned client");
-    next(new Error("banned"));
+    })();
   });
 
   io.on("connection", (socket) => {
@@ -177,6 +226,8 @@ export function registerRealtime(
         await limiter.consume(clientIp);
       } catch (err) {
         if (err instanceof RateLimiterRes) {
+          // 한도에 걸린 이력은 점수에 쌓인다. 반복되면 챌린지로 이어진다.
+          guard?.noteSuspicious(clientIp, 3);
           socket.emit("blocked", {
             reason: "rate_limited",
             retryAfterMs: err.msBeforeNext,

@@ -1,0 +1,8 @@
+# 크롤러에게는 작업증명을 요구하지 않는다. 이 페이지는 정적 HTML 몇 KB라
+# 긁어가도 서버가 아프지 않고, 긁어갈 내용도 없다. 대신 의미 없는 경로만
+# 알려준다.
+
+User-agent: *
+Disallow: /admin.html
+Disallow: /api/
+Allow: /

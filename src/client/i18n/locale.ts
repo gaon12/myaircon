@@ -70,6 +70,13 @@ export type Locale = {
   readonly timeHours: (count: number) => string;
   readonly statsError: string;
 
+  readonly verifyTitle: string;
+  readonly verifyBody: string;
+  readonly verifyProgress: (attempts: number) => string;
+  readonly verifyFailed: string;
+  readonly verifyRetry: string;
+  readonly connectionBlocked: string;
+
   readonly aboutLines: (device: string) => readonly string[];
 };
 

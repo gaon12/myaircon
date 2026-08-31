@@ -8,6 +8,7 @@ import type {
 } from "../shared/protocol.ts";
 import type { RankPeriod } from "../shared/stats.ts";
 import { BrownNoise, gainForTemperature } from "./audio.ts";
+import { runChallenge } from "./challenge.ts";
 import { requireElement } from "./dom.ts";
 import { type Locale, type LocaleCode, localeOptions, locales, pickLocale } from "./i18n/index.ts";
 import type { PlainStringKey } from "./i18n/locale.ts";
@@ -47,6 +48,9 @@ const els = {
   recentList: requireElement("[data-recent-list]", HTMLOListElement),
   chart: requireElement("[data-hourly-chart]", SVGSVGElement),
   chartCaption: requireElement("[data-hourly-caption]", HTMLParagraphElement),
+  verifyDialog: requireElement("[data-verify-dialog]", HTMLDialogElement),
+  verifyProgress: requireElement("[data-verify-progress]", HTMLParagraphElement),
+  verifyRetry: requireElement("[data-verify-retry]", HTMLButtonElement),
 };
 
 const rankTabs = [...document.querySelectorAll<HTMLButtonElement>("[data-rank-period]")];
@@ -245,10 +249,23 @@ const connection = createConnection({
 
   onStatus(status: ConnectionStatus) {
     if (!state.online) return;
-    if (status === "connected") setOnlineLabel(strings.onlineOn, true);
-    else if (status === "disconnected") transientText(els.notice, strings.connectionLost);
-    else if (status === "error") transientText(els.notice, strings.connectionFailed);
-    else transientText(els.notice, strings.serverError);
+    if (status === "connected") {
+      els.verifyDialog.close();
+      setOnlineLabel(strings.onlineOn, true);
+    } else if (status === "challenge-required") {
+      // 점수가 애매해서 서버가 확인을 요구했다. 평소에는 오지 않는 경로다.
+      void verifyThenReconnect();
+    } else if (status === "blocked") {
+      setOnlineLabel(strings.onlineOff, false);
+      state.online = false;
+      transientText(els.notice, strings.connectionBlocked);
+    } else if (status === "disconnected") {
+      transientText(els.notice, strings.connectionLost);
+    } else if (status === "error") {
+      transientText(els.notice, strings.connectionFailed);
+    } else {
+      transientText(els.notice, strings.serverError);
+    }
   },
 
   onProtocolError(event, error) {
@@ -286,6 +303,36 @@ async function toggleSound(): Promise<void> {
     await audio.start(currentGain(state.temp));
   }
   setSoundLabel();
+}
+
+/**
+ * 확인 화면을 띄우고 작업증명을 푼 뒤 다시 접속한다.
+ *
+ * 이 경로는 점수가 애매할 때만 탄다. 대부분의 사용자는 평생 보지 않는다.
+ */
+let verifying = false;
+
+async function verifyThenReconnect(): Promise<void> {
+  if (verifying) return;
+  verifying = true;
+  els.verifyRetry.hidden = true;
+  els.verifyProgress.textContent = "";
+  if (!els.verifyDialog.open) els.verifyDialog.showModal();
+
+  try {
+    const token = await runChallenge((attempts) => {
+      els.verifyProgress.textContent = strings.verifyProgress(attempts);
+    });
+    if (token === null) {
+      els.verifyProgress.textContent = strings.verifyFailed;
+      els.verifyRetry.hidden = false;
+      return;
+    }
+    connection.setChallengeToken(token);
+    connection.connect();
+  } finally {
+    verifying = false;
+  }
 }
 
 function toggleOnline(): void {
@@ -421,6 +468,7 @@ els.plus.addEventListener("click", () => adjust("up"));
 els.minus.addEventListener("click", () => adjust("down"));
 els.sound.addEventListener("click", () => void toggleSound());
 els.online.addEventListener("click", toggleOnline);
+els.verifyRetry.addEventListener("click", () => void verifyThenReconnect());
 els.languageSelect.addEventListener("change", () => setLocale(els.languageSelect.value));
 els.themeSelect.addEventListener("change", () => {
   const next = els.themeSelect.value;

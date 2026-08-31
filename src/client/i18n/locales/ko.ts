@@ -59,6 +59,12 @@ export default {
   timeMinutes: (count: number) => `${count}분 전`,
   timeHours: (count: number) => `${count}시간 전`,
   statsError: "통계를 불러오지 못했습니다",
+  verifyTitle: "잠시 확인이 필요합니다",
+  verifyBody: "자동 접속이 아닌지 확인하는 중입니다. 잠시만 기다려 주세요.",
+  verifyProgress: (attempts: number) => `확인 중… (${attempts.toLocaleString()}회 시도)`,
+  verifyFailed: "확인에 실패했습니다. 다시 시도해 주세요",
+  verifyRetry: "다시 시도",
+  connectionBlocked: "접속이 제한되었습니다. 잠시 후 다시 시도해 주세요",
   aboutLines: (device) => [
     "집중과 휴식을 위한 브라운 노이즈 생성기입니다.",
     `온라인 모드를 켜면 접속한 모든 사람과 ${device} 하나를 같이 씁니다 (전기 절약).`,

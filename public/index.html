@@ -132,6 +132,15 @@
       </form>
     </dialog>
 
+    <dialog class="dialog" data-verify-dialog>
+      <h2 class="stat-heading" data-i18n="verifyTitle">잠시 확인이 필요합니다</h2>
+      <p data-i18n="verifyBody">자동 접속이 아닌지 확인하는 중입니다. 잠시만 기다려 주세요.</p>
+      <p class="stat-note" data-verify-progress aria-live="polite"></p>
+      <button type="button" class="pill" data-verify-retry hidden data-i18n="verifyRetry">
+        다시 시도
+      </button>
+    </dialog>
+
     <dialog class="dialog dialog-stats" data-stats-dialog>
       <p class="stat-online" data-online-count aria-live="polite">—</p>
 

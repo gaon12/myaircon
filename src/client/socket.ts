@@ -1,4 +1,5 @@
 import { io } from "/vendor/socket.io/socket.io.esm.min.js";
+import { CHALLENGE_REQUIRED, CONNECTION_BLOCKED } from "../shared/challenge.ts";
 import {
   type BlockedMessage,
   blockedMessageSchema,
@@ -15,7 +16,15 @@ import {
 import { type OnlineCountMessage, onlineCountMessageSchema } from "../shared/stats.ts";
 import type { Validator } from "../shared/validate.ts";
 
-export type ConnectionStatus = "connected" | "disconnected" | "error" | "server-error";
+export type ConnectionStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "server-error"
+  /** 점수가 애매해 사람인지 확인이 필요하다. */
+  | "challenge-required"
+  /** 차단됐거나 점수가 차단 구간이다. */
+  | "blocked";
 
 export type ConnectionHandlers = {
   onInit: (message: InitMessage) => void;
@@ -33,6 +42,8 @@ export type Connection = {
   connect: () => void;
   disconnect: () => void;
   step: (direction: Direction, username: string) => void;
+  /** 챌린지를 통과해 받은 토큰. 다음 접속부터 핸드셰이크에 실린다. */
+  setChallengeToken: (token: string) => void;
 };
 
 /**
@@ -54,11 +65,15 @@ export type Connection = {
  * 핸들러가 그대로 살아 있다.
  */
 export function createConnection(handlers: ConnectionHandlers): Connection {
+  // 챌린지를 통과했으면 그 토큰을 핸드셰이크에 실어 보낸다.
+  const auth: { challengeToken?: string } = {};
+
   const socket = io({
     // websocket 전용이면 이를 막는 네트워크에서 접속이 아예 불가능하다.
     transports: ["websocket", "polling"],
     // 토글을 누르기 전에는 연결하지 않는다.
     autoConnect: false,
+    auth,
   }) as ReturnType<typeof io> & {
     on: <E extends keyof ServerToClientEvents>(
       event: E,
@@ -88,7 +103,14 @@ export function createConnection(handlers: ConnectionHandlers): Connection {
 
   socket.on("connect", () => handlers.onStatus("connected"));
   socket.on("disconnect", (reason: unknown) => handlers.onStatus("disconnected", reason));
-  socket.on("connect_error", (error: unknown) => handlers.onStatus("error", error));
+  socket.on("connect_error", (error: unknown) => {
+    // 서버가 왜 거부했는지에 따라 화면이 달라야 한다. 챌린지가 필요한 것과
+    // 그냥 연결이 안 되는 것은 사용자가 할 수 있는 일이 다르다.
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === CHALLENGE_REQUIRED) handlers.onStatus("challenge-required", error);
+    else if (message === CONNECTION_BLOCKED) handlers.onStatus("blocked", error);
+    else handlers.onStatus("error", error);
+  });
   socket.on("server-error", () => handlers.onStatus("server-error"));
 
   // 서버는 매 접속(재연결 포함)마다 init을 보낸다. 생성 시점에 등록해 두면
@@ -114,6 +136,9 @@ export function createConnection(handlers: ConnectionHandlers): Connection {
     },
     step(direction, username) {
       socket.emit(direction === "up" ? "plus" : "minus", username);
+    },
+    setChallengeToken(token) {
+      auth.challengeToken = token;
     },
   };
 }

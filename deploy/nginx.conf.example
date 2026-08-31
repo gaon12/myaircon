@@ -1,0 +1,135 @@
+# myaircon - nginx 리버스 프록시 예시
+#
+# 역할 분담
+#   nginx : 양(volume)을 막는다. 연결 수, 요청 속도, TLS, 정적 파일, 느린 클라이언트.
+#           Node에 닿기 전에 끊는 것이 훨씬 싸다.
+#   Node  : 의미(semantics)를 막는다. 이 IP가 소켓을 몇 개 들고 있는지,
+#           관리 토큰을 몇 번 틀렸는지, 버튼을 얼마나 빨리 누르는지.
+#           nginx는 "이 요청이 socket.io 핸드셰이크인지 버튼 누름인지" 모른다.
+#
+# 이 파일을 그대로 쓰지 말고 도메인, 인증서 경로, 한도를 환경에 맞게 고칠 것.
+
+# ---------------------------------------------------------------- 한도 정의
+# $binary_remote_addr 는 IP당이라는 뜻이다. CDN 뒤라면 실제 클라이언트 IP를
+# 담은 변수(예: $http_cf_connecting_ip)로 바꾸거나 realip 모듈을 쓸 것.
+
+limit_req_zone  $binary_remote_addr zone=myaircon_req:10m rate=10r/s;
+limit_conn_zone $binary_remote_addr zone=myaircon_conn:10m;
+
+upstream myaircon {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+
+# ---------------------------------------------------------------- HTTP -> HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name myaircon.example;
+
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+# ---------------------------------------------------------------- 본체
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name myaircon.example;
+
+    ssl_certificate     /etc/letsencrypt/live/myaircon.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/myaircon.example/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    # HSTS는 여기서 켠다. 앱의 HSTS_MAX_AGE와 중복해서 켜지 말 것.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # 느린 클라이언트(slowloris) 대비. Node가 할 수 없는 일이다.
+    client_body_timeout   10s;
+    client_header_timeout 10s;
+    client_max_body_size  16k;   # 이 앱은 큰 본문을 받지 않는다
+    send_timeout          30s;
+
+    # 동시 연결 수. 한 사람이 소켓을 독차지하지 못하게 한다.
+    # 앱의 GUARD_MAX_SOCKETS_PER_IP 와 목적이 같지만, 여기서 막으면 Node가
+    # 아무것도 할당하지 않는다.
+    limit_conn myaircon_conn 20;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # ------------------------------------------------------------ WebSocket
+    # 이 블록이 없으면 socket.io가 polling으로만 붙거나 아예 실패한다.
+    # 업그레이드 헤더를 그대로 넘기고, 타임아웃을 넉넉히 줘야 한다.
+    location /socket.io/ {
+        proxy_pass http://myaircon;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket은 오래 열려 있다. 기본 60초로 두면 조용히 끊긴다.
+        proxy_read_send_timeout 7d;
+        proxy_read_timeout      7d;
+        proxy_send_timeout      7d;
+
+        # 핸드셰이크 자체에도 속도 제한을 건다. 재접속 폭주 대비.
+        limit_req zone=myaircon_req burst=20 nodelay;
+    }
+
+    # ------------------------------------------------------------ 관리
+    # 인증은 앱의 ADMIN_TOKEN이 하지만, 네트워크 단에서 한 번 더 좁히면 좋다.
+    # 사무실/VPN 대역만 열거나, 아래 두 줄을 지워 공개로 둘 수 있다.
+    location /admin.html {
+        # allow 203.0.113.0/24;
+        # deny  all;
+        limit_req zone=myaircon_req burst=5 nodelay;
+        proxy_pass http://myaircon;
+        include /etc/nginx/proxy_params;
+    }
+
+    location /api/admin/ {
+        # allow 203.0.113.0/24;
+        # deny  all;
+        # 토큰 무차별 대입을 네트워크 단에서도 늦춘다.
+        limit_req zone=myaircon_req burst=5 nodelay;
+        proxy_pass http://myaircon;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ------------------------------------------------------------ 그 외
+    location / {
+        limit_req zone=myaircon_req burst=20 nodelay;
+
+        proxy_pass http://myaircon;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# ---------------------------------------------------------------- 앱 설정
+#
+# 이 구성이라면 프록시가 한 단이므로 앱에 다음을 준다.
+#
+#   TRUST_PROXY_HOPS=1
+#
+# 이 값이 틀리면 rate limit과 차단이 엉뚱한 대상에게 걸린다.
+#   0으로 두면  -> 모든 사용자가 nginx의 주소 하나를 공유해 한 버킷에 갇힌다
+#   1인데 프록시가 없으면 -> 클라이언트가 X-Forwarded-For를 위조해 제한을 우회한다
+# CDN을 앞에 하나 더 두면 2다.
+#
+# HSTS를 nginx에서 켰으므로 앱에서는 끈다(기본값 0).
+#   HSTS_MAX_AGE=0

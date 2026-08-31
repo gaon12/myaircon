@@ -60,6 +60,12 @@ export default {
   timeMinutes: (count: number) => `${count}m ago`,
   timeHours: (count: number) => `${count}h ago`,
   statsError: "Could not load statistics",
+  verifyTitle: "Quick check",
+  verifyBody: "Making sure you are not an automated client. This only takes a moment.",
+  verifyProgress: (attempts: number) => `Checking… (${attempts.toLocaleString()} attempts)`,
+  verifyFailed: "Check failed. Please try again",
+  verifyRetry: "Try again",
+  connectionBlocked: "Connection is restricted. Please try again later",
   aboutLines: (device) => [
     "A brown noise generator to focus and relax.",
     `Turn on online mode to share one ${device} with everyone (saves electricity).`,

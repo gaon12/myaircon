@@ -129,6 +129,22 @@ export type AppConfig = {
     /** kick 시 기본 차단 시간(분). */
     defaultBanMinutes: number;
   };
+  guard: {
+    enabled: boolean;
+    maxConcurrentSockets: number;
+    handshakesPerMinute: number;
+    httpPerMinute: number;
+    adminFailureLimit: number;
+    adminLockSeconds: number;
+    challengeScore: number;
+    blockScore: number;
+  };
+  challenge: {
+    /** 작업증명 난이도(앞에서부터 0이어야 하는 비트 수). 올리면 클라이언트가 더 오래 계산한다. */
+    difficulty: number;
+    ttlSeconds: number;
+    tokenTtlSeconds: number;
+  };
 };
 
 export const config: AppConfig = {
@@ -221,6 +237,27 @@ export const config: AppConfig = {
     })(),
     banFile: readString("BAN_FILE", path.join(ROOT, "data", "bans.db")),
     defaultBanMinutes: readInt("BAN_DEFAULT_MINUTES", 10, { min: 0, max: 60 * 24 * 365 }),
+  },
+
+  // 앞단에 nginx/Apache가 있어도 애플리케이션만 아는 것들이 있다.
+  // 이 IP가 소켓을 몇 개 들고 있는지, 관리 토큰을 몇 번 틀렸는지 같은 것들.
+  // 리버스 프록시는 양(volume)을, 여기서는 의미(semantics)를 막는다.
+  guard: {
+    enabled: readBool("GUARD_ENABLED", true),
+    maxConcurrentSockets: readInt("GUARD_MAX_SOCKETS_PER_IP", 8, { min: 1, max: 1000 }),
+    handshakesPerMinute: readInt("GUARD_HANDSHAKES_PER_MINUTE", 30, { min: 1, max: 10_000 }),
+    httpPerMinute: readInt("GUARD_HTTP_PER_MINUTE", 240, { min: 10, max: 100_000 }),
+    adminFailureLimit: readInt("GUARD_ADMIN_FAILURE_LIMIT", 5, { min: 1, max: 1000 }),
+    adminLockSeconds: readInt("GUARD_ADMIN_LOCK_SECONDS", 900, { min: 10, max: 86_400 }),
+    challengeScore: readInt("GUARD_CHALLENGE_SCORE", 50, { min: 1, max: 100 }),
+    blockScore: readInt("GUARD_BLOCK_SCORE", 85, { min: 1, max: 100 }),
+  },
+
+  // 점수가 애매할 때만 띄우는 작업증명. 14비트면 브라우저에서 보통 1초 미만이다.
+  challenge: {
+    difficulty: readInt("CHALLENGE_DIFFICULTY", 14, { min: 4, max: 24 }),
+    ttlSeconds: readInt("CHALLENGE_TTL_SECONDS", 120, { min: 10, max: 3600 }),
+    tokenTtlSeconds: readInt("CHALLENGE_TOKEN_TTL_SECONDS", 1800, { min: 60, max: 86_400 }),
   },
 
   security: {

@@ -59,6 +59,12 @@ export default {
   timeMinutes: (count: number) => `${count} 分钟前`,
   timeHours: (count: number) => `${count} 小时前`,
   statsError: "无法加载统计数据",
+  verifyTitle: "需要简单验证",
+  verifyBody: "正在确认您不是自动客户端，请稍候。",
+  verifyProgress: (attempts: number) => `验证中…（已尝试 ${attempts.toLocaleString()} 次）`,
+  verifyFailed: "验证失败，请重试",
+  verifyRetry: "重试",
+  connectionBlocked: "连接已受限，请稍后再试",
   aboutLines: (device) => [
     "用于专注和放松的棕色噪声生成器。",
     `开启在线模式后，所有在线的人共用一台${device}（节省电力）。`,

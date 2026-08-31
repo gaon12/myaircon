@@ -9,6 +9,7 @@ import {
 } from "../shared/admin.ts";
 import type { BanStore } from "./ban-store.ts";
 import type { AppConfig } from "./config.ts";
+import type { Guard } from "./guard.ts";
 import type { IdentityTagger } from "./identity.ts";
 import type { RealtimeHandle } from "./realtime.ts";
 
@@ -17,6 +18,8 @@ export type AdminDeps = {
   realtime: RealtimeHandle;
   bans: BanStore;
   tagger: IdentityTagger;
+  /** 토큰 무차별 대입을 늦춘다. */
+  guard: Guard;
 };
 
 /** 길이가 달라도 시간이 새지 않게 비교한다. */
@@ -41,7 +44,7 @@ function tokenMatches(provided: string, expected: string): boolean {
  * 완전한 차단이 아니라 장난의 비용을 올리는 장치로 본다.
  */
 export function registerAdmin(app: FastifyInstance, deps: AdminDeps): void {
-  const { config, realtime, bans, tagger } = deps;
+  const { config, realtime, bans, tagger, guard } = deps;
   const token = config.admin.token;
   if (token === null) {
     app.log.info("ADMIN_TOKEN is not set; admin API disabled");
@@ -59,11 +62,22 @@ export function registerAdmin(app: FastifyInstance, deps: AdminDeps): void {
   app.addHook("onRequest", async (request, reply) => {
     if (!request.url.startsWith("/api/admin/")) return;
 
+    // 토큰이 길어 현실적으로 뚫리지 않더라도, 무제한 시도를 허용할 이유가 없다.
+    if (await guard.isAdminLocked(request.ip)) {
+      app.log.warn({ ip: request.ip }, "admin locked out after repeated failures");
+      await reply.code(429).send({ error: "too_many_attempts" });
+      return;
+    }
+
     const header = request.headers.authorization ?? "";
     const provided = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-    if (tokenMatches(provided, token)) return;
+    if (tokenMatches(provided, token)) {
+      await guard.clearAdminFailures(request.ip);
+      return;
+    }
 
-    app.log.warn({ ip: request.ip, url: request.url }, "rejected admin request");
+    const locked = await guard.noteAdminFailure(request.ip);
+    app.log.warn({ ip: request.ip, url: request.url, locked }, "rejected admin request");
     await reply.code(401).send({ error: "unauthorized" });
   });
 
