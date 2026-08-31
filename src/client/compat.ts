@@ -1,3 +1,5 @@
+import { pickCharacter } from "./challenge.ts";
+
 /**
  * 브라우저가 이 앱을 돌릴 수 있는지 확인한다.
  *
@@ -47,10 +49,24 @@ export function missingFeatures(): string[] {
  * 마크업에 이미 있는 요소를 드러내는 방식이라, 스크립트가 여기까지만 돌아도
  * 사용자는 무엇이 문제인지 읽을 수 있다. 실패한 기능 이름은 개발자가 볼 수
  * 있도록 콘솔에만 남긴다 -- 화면에 "Object.hasOwn"이라고 띄워봐야 소용없다.
+ *
+ * 캐릭터는 마크업에 이미 scan_1이 박혀 있다. 여기까지 왔다는 것은 스크립트가
+ * 돌긴 한다는 뜻이므로 그때만 무작위로 바꾼다. IE처럼 이 함수에 닿지도 못하는
+ * 브라우저는 마크업의 것을 그대로 본다 -- 고정 캐릭터라도 나오는 편이,
+ * 스크립트로 채우려다 빈 자리를 남기는 것보다 낫다.
  */
 export function showLegacyNotice(missing: readonly string[]): void {
   document.documentElement.classList.add("is-legacy");
   if (missing.length > 0) {
     console.warn(`지원되지 않는 브라우저입니다. 없는 기능: ${missing.join(", ")}`);
+  }
+  try {
+    const image = document.querySelector("[data-legacy-image]");
+    if (image instanceof HTMLImageElement) {
+      image.src = `/img/scan_${pickCharacter()}.png`;
+    }
+  } catch {
+    // 마크업의 기본 캐릭터가 그대로 남는다. 안내를 띄우는 것이 본업이므로
+    // 그림 하나 때문에 여기서 멈추면 안 된다.
   }
 }
