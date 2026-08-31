@@ -43,7 +43,7 @@ const assetUrl = (): Validator<string> => ({
       !url.includes("..") &&
       /^\/[\w.\-/]+\.(png|webp|avif|svg)$/.test(url);
     if (!looksLocal) {
-      return { ok: false, error: `${path || "value"}: /로 시작하는 이미지 경로여야 합니다` };
+      return { ok: false, error: `${path || "value"}: must be a local image path starting with /` };
     }
     return result;
   },

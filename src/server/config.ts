@@ -19,7 +19,7 @@ function readInt(
   if (raw === undefined || raw === "") return fallback;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-    throw new Error(`환경변수 ${name}는 ${min}~${max} 범위의 정수여야 합니다 (받은 값: ${raw})`);
+    throw new Error(`env ${name} must be an integer between ${min} and ${max} (received: ${raw})`);
   }
   return parsed;
 }
@@ -43,9 +43,7 @@ function readEnum<const T extends readonly string[]>(
 ): T[number] {
   const raw = readString(name, fallback);
   if (!allowed.includes(raw)) {
-    throw new Error(
-      `환경변수 ${name}는 ${allowed.join(" | ")} 중 하나여야 합니다 (받은 값: ${raw})`,
-    );
+    throw new Error(`env ${name} must be one of ${allowed.join(" | ")} (received: ${raw})`);
   }
   return raw as T[number];
 }
@@ -59,7 +57,7 @@ function readMonths(name: string, fallback: number[]): number[] {
     .map((part) => Number(part.trim()))
     .filter((n) => Number.isInteger(n));
   if (months.length === 0 || months.some((n) => n < 1 || n > 12)) {
-    throw new Error(`환경변수 ${name}는 1~12 사이 월을 쉼표로 나열해야 합니다 (받은 값: ${raw})`);
+    throw new Error(`env ${name} must be a comma-separated list of months 1-12 (received: ${raw})`);
   }
   return months;
 }
@@ -69,7 +67,7 @@ function readTimeZone(name: string): string | null {
   const raw = readString(name, "");
   if (raw === "") return null;
   if (!isValidTimeZone(raw)) {
-    throw new Error(`환경변수 ${name}는 유효한 IANA 시간대여야 합니다 (받은 값: ${raw})`);
+    throw new Error(`env ${name} must be a valid IANA time zone (received: ${raw})`);
   }
   return raw;
 }
@@ -77,7 +75,7 @@ function readTimeZone(name: string): string | null {
 const TEMP_MIN = readInt("TEMP_MIN", 18, { min: -50, max: 100 });
 const TEMP_MAX = readInt("TEMP_MAX", 30, { min: -50, max: 100 });
 if (TEMP_MIN >= TEMP_MAX) {
-  throw new Error(`TEMP_MIN(${TEMP_MIN})은 TEMP_MAX(${TEMP_MAX})보다 작아야 합니다`);
+  throw new Error(`TEMP_MIN (${TEMP_MIN}) must be less than TEMP_MAX (${TEMP_MAX})`);
 }
 
 export type AppConfig = {

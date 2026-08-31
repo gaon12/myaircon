@@ -7,7 +7,7 @@ const { app } = context;
 try {
   await app.listen({ host: config.host, port: config.port });
 } catch (err) {
-  app.log.error({ err }, "서버를 시작하지 못했습니다");
+  app.log.error({ err }, "failed to start server");
   await closeApp(context).catch(() => {});
   process.exit(1);
 }
@@ -22,21 +22,21 @@ let shuttingDown = false;
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  app.log.info({ signal }, "종료 신호를 받아 정리를 시작합니다");
+  app.log.info({ signal }, "received shutdown signal, cleaning up");
 
   // 정리가 어떤 이유로든 끝나지 않아도 배포가 멈추지 않도록 상한을 둔다.
   const forceExit = setTimeout(() => {
-    app.log.error("정리가 10초 안에 끝나지 않아 강제 종료합니다");
+    app.log.error("cleanup did not finish within 10s, forcing exit");
     process.exit(1);
   }, 10_000);
   forceExit.unref();
 
   try {
     await closeApp(context);
-    app.log.info("정상 종료");
+    app.log.info("shutdown complete");
     process.exit(0);
   } catch (err) {
-    app.log.error({ err }, "종료 중 오류");
+    app.log.error({ err }, "error during shutdown");
     process.exit(1);
   }
 }
@@ -46,5 +46,5 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 process.on("unhandledRejection", (err) => {
-  app.log.error({ err }, "처리되지 않은 Promise 거부");
+  app.log.error({ err }, "unhandled promise rejection");
 });

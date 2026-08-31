@@ -14,11 +14,11 @@ export function requireElement<T extends Element>(
 ): T {
   const element = document.querySelector(selector);
   if (element === null) {
-    throw new Error(`마크업에서 ${selector} 를 찾지 못했습니다`);
+    throw new Error(`no element matches ${selector}`);
   }
   if (!(element instanceof expected)) {
     throw new TypeError(
-      `${selector} 는 ${expected.name} 여야 하는데 ${element.constructor.name} 입니다`,
+      `${selector} should be ${expected.name} but is ${element.constructor.name}`,
     );
   }
   return element;

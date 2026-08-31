@@ -66,7 +66,7 @@ export async function buildApp({
   const saved = await store.load();
   if (saved !== null) {
     const restored = thermostat.restore(saved.temp);
-    app.log.info({ temp: restored }, "저장된 온도를 복원했습니다");
+    app.log.info({ temp: restored }, "restored persisted temperature");
   }
 
   // CDN을 걷어냈으므로 외부 출처를 전혀 허용하지 않는 CSP를 걸 수 있다.

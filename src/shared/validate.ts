@@ -50,12 +50,12 @@ export function string(
 ): Validator<string> {
   return validator((input, path) => {
     if (typeof input !== "string")
-      return err(path, `문자열이어야 합니다 (받은 값: ${describe(input)})`);
+      return err(path, `expected a string (received: ${describe(input)})`);
     if (options.minLength !== undefined && input.length < options.minLength) {
-      return err(path, `최소 ${options.minLength}자여야 합니다`);
+      return err(path, `expected at least ${options.minLength} characters`);
     }
     if (options.maxLength !== undefined && input.length > options.maxLength) {
-      return err(path, `최대 ${options.maxLength}자여야 합니다`);
+      return err(path, `expected at most ${options.maxLength} characters`);
     }
     return ok(input);
   });
@@ -64,13 +64,13 @@ export function string(
 export function integer(options: { min?: number; max?: number } = {}): Validator<number> {
   return validator((input, path) => {
     if (typeof input !== "number" || !Number.isInteger(input)) {
-      return err(path, `정수여야 합니다 (받은 값: ${describe(input)})`);
+      return err(path, `expected an integer (received: ${describe(input)})`);
     }
     if (options.min !== undefined && input < options.min) {
-      return err(path, `${options.min} 이상이어야 합니다 (받은 값: ${input})`);
+      return err(path, `expected >= ${options.min} (received: ${input})`);
     }
     if (options.max !== undefined && input > options.max) {
-      return err(path, `${options.max} 이하여야 합니다 (받은 값: ${input})`);
+      return err(path, `expected <= ${options.max} (received: ${input})`);
     }
     return ok(input);
   });
@@ -80,7 +80,7 @@ export function boolean(): Validator<boolean> {
   return validator((input, path) =>
     typeof input === "boolean"
       ? ok(input)
-      : err(path, `불리언이어야 합니다 (받은 값: ${describe(input)})`),
+      : err(path, `expected a boolean (received: ${describe(input)})`),
   );
 }
 
@@ -91,7 +91,7 @@ export function literal<const T extends readonly (string | number | boolean)[]>(
   return validator((input, path) =>
     values.includes(input as T[number])
       ? ok(input as T[number])
-      : err(path, `${values.map((v) => JSON.stringify(v)).join(" | ")} 중 하나여야 합니다`),
+      : err(path, `expected one of ${values.map((v) => JSON.stringify(v)).join(" | ")}`),
   );
 }
 
@@ -99,7 +99,7 @@ export function literal<const T extends readonly (string | number | boolean)[]>(
 
 export function arrayOf<T>(item: Validator<T>): Validator<T[]> {
   return validator((input, path) => {
-    if (!Array.isArray(input)) return err(path, `배열이어야 합니다 (받은 값: ${describe(input)})`);
+    if (!Array.isArray(input)) return err(path, `expected an array (received: ${describe(input)})`);
     const out: T[] = [];
     for (const [index, element] of input.entries()) {
       const result = item.parse(element, `${path}[${index}]`);
@@ -118,7 +118,7 @@ export function object<const S extends Shape>(shape: S): Validator<FromShape<S>>
   const entries = Object.entries(shape);
   return validator((input, path) => {
     if (typeof input !== "object" || input === null || Array.isArray(input)) {
-      return err(path, `객체여야 합니다 (받은 값: ${describe(input)})`);
+      return err(path, `expected an object (received: ${describe(input)})`);
     }
     const source = input as Record<string, unknown>;
     const out: Record<string, unknown> = {};
@@ -130,7 +130,7 @@ export function object<const S extends Shape>(shape: S): Validator<FromShape<S>>
       try {
         raw = source[key];
       } catch {
-        return err(where, "값을 읽을 수 없습니다");
+        return err(where, "could not read property");
       }
       const result = field.parse(raw, where);
       if (!result.ok) return result;
@@ -150,7 +150,7 @@ export function union<const V extends readonly Validator<unknown>[]>(
       if (result.ok) return ok(result.value as Infer<V[number]>);
       reasons.push(result.error);
     }
-    return err(path, `어느 형태와도 맞지 않습니다 (${reasons.join(" / ")})`);
+    return err(path, `did not match any variant (${reasons.join(" / ")})`);
   });
 }
 

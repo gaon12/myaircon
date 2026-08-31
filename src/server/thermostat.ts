@@ -26,10 +26,10 @@ export class Thermostat {
 
   constructor({ min, max, initial }: TemperatureRange) {
     if (!Number.isInteger(min) || !Number.isInteger(max)) {
-      throw new TypeError("min/max는 정수여야 합니다");
+      throw new TypeError("min/max must be integers");
     }
     if (min >= max) {
-      throw new RangeError(`min(${min})은 max(${max})보다 작아야 합니다`);
+      throw new RangeError(`min (${min}) must be less than max (${max})`);
     }
     this.#min = min;
     this.#max = max;
@@ -57,9 +57,7 @@ export class Thermostat {
   step(direction: Direction): StepResult {
     // 타입은 컴파일 시점에 지워지므로 런타임에도 확인한다.
     if (direction !== "up" && direction !== "down") {
-      throw new TypeError(
-        `direction은 "up" 또는 "down"이어야 합니다 (받은 값: ${String(direction)})`,
-      );
+      throw new TypeError(`direction must be "up" or "down" (received: ${String(direction)})`);
     }
     const before = this.#value;
     const next = direction === "up" ? before + 1 : before - 1;

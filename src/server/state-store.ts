@@ -55,7 +55,7 @@ export class StateStore {
       if (!parsed.ok) {
         this.#logger.warn?.(
           { file: this.#file, error: parsed.error },
-          "저장된 상태의 형식이 올바르지 않아 초기값으로 시작합니다",
+          "persisted state has an unexpected shape, starting from the initial value",
         );
         return null;
       }
@@ -64,7 +64,7 @@ export class StateStore {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
         this.#logger.warn?.(
           { err, file: this.#file },
-          "저장된 상태를 읽지 못해 초기값으로 시작합니다",
+          "could not read persisted state, starting from the initial value",
         );
       }
       return null;
@@ -109,7 +109,7 @@ export class StateStore {
       await writeFile(tmp, `${JSON.stringify(data)}\n`, "utf8");
       await rename(tmp, this.#file);
     } catch (err) {
-      this.#logger.warn?.({ err, file: this.#file }, "상태 저장에 실패했습니다");
+      this.#logger.warn?.({ err, file: this.#file }, "failed to persist state");
     }
   }
 }

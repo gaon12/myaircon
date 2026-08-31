@@ -57,10 +57,10 @@ export function registerRealtime(
     {
       kind: device.kind,
       mode: config.device.mode,
-      timeZone: config.device.timeZone ?? "(서버 로컬)",
+      timeZone: config.device.timeZone ?? "(system default)",
       usingFallback: device.usingFallback,
     },
-    "기기 종류를 결정했습니다",
+    "resolved device kind",
   );
 
   // 서버가 계절이 바뀌는 순간에도 계속 켜져 있을 수 있다. 주기적으로 다시 보고
@@ -69,7 +69,7 @@ export function registerRealtime(
     const next = readDevice();
     if (next.kind === device.kind) return;
     device = next;
-    logger.info({ kind: device.kind }, "계절이 바뀌어 기기를 교체합니다");
+    logger.info({ kind: device.kind }, "season changed, swapping device");
     io.emit("deviceChange", device);
   }, config.device.recheckIntervalMs);
   seasonTimer.unref?.();
@@ -93,7 +93,7 @@ export function registerRealtime(
     socket.on("minus", (payload) => void handleStep("down", payload));
 
     socket.on("error", (err: unknown) => {
-      logger.warn({ err, socketId: socket.id }, "소켓 오류");
+      logger.warn({ err, socketId: socket.id }, "socket error");
     });
 
     async function handleStep(direction: Direction, rawNickname: NicknamePayload): Promise<void> {
@@ -119,7 +119,7 @@ export function registerRealtime(
             retryAfterMs: err.msBeforeNext,
           });
         } else {
-          logger.error({ err, clientIp }, "rate limiter 동작 실패");
+          logger.error({ err, clientIp }, "rate limiter failed");
           socket.emit("server-error", { reason: "internal" });
         }
         return;
