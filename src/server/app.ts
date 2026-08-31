@@ -3,6 +3,7 @@ import path from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { Server as SocketIOServer } from "socket.io";
+import { signalsFromUserAgent } from "../shared/automation.ts";
 import { verifyRequestSchema } from "../shared/challenge.ts";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/protocol.ts";
 import { registerAdmin } from "./admin.ts";
@@ -154,6 +155,16 @@ export async function buildApp({
   if (config.guard.enabled) {
     app.addHook("onRequest", async (request, reply) => {
       const ip = clientIpOf(request);
+
+      // User-Agent가 스스로 도구라고 밝히면 점수만 올려 둔다. 여기서 막지는
+      // 않는다 -- UA만 보고 HTTP를 거절하면 가동 감시나 링크 미리보기가
+      // 조용히 죽고, 원인을 찾기가 유난히 어렵다. 소켓을 열 때쯤이면 점수가
+      // 이미 쌓여 있으므로 그때 판정에 반영된다.
+      if (config.guard.automationPoints > 0) {
+        const signals = signalsFromUserAgent(request.headers["user-agent"]);
+        if (signals.length > 0) guard.noteSuspicious(ip, config.guard.automationPoints);
+      }
+
       if (await guard.allowHttpRequest(ip)) return;
       reply.header("Retry-After", "60");
       await reply.code(429).send({ error: "too_many_requests" });

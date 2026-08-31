@@ -48,7 +48,9 @@ export type TestServer = AppContext & {
   url: string;
   stateDir: string;
   /** 접속이 완료되고 init까지 받은 클라이언트를 돌려준다. */
-  connect: () => Promise<ConnectedClient>;
+  connect: (auth?: Record<string, unknown>) => Promise<ConnectedClient>;
+  /** 접속만 시도하고 소켓을 돌려준다. 거부 사유를 보려는 테스트용. */
+  dial: (auth?: Record<string, unknown>) => Socket;
   stop: () => Promise<void>;
 };
 
@@ -77,18 +79,26 @@ export async function startTestServer(overrides: ConfigOverrides = {}): Promise<
 
   const sockets: Socket[] = [];
 
+  const dial = (auth?: Record<string, unknown>): Socket => {
+    const socket = createClient(`http://127.0.0.1:${port}`, {
+      transports: ["websocket"],
+      forceNew: true,
+      reconnection: false,
+      ...(auth === undefined ? {} : { auth }),
+    });
+    sockets.push(socket);
+    return socket;
+  };
+
   return {
     ...context,
     url: `http://127.0.0.1:${port}`,
     stateDir: dir,
 
-    async connect() {
-      const socket = createClient(`http://127.0.0.1:${port}`, {
-        transports: ["websocket"],
-        forceNew: true,
-        reconnection: false,
-      });
-      sockets.push(socket);
+    dial,
+
+    async connect(auth) {
+      const socket = dial(auth);
       const init = await once<InitMessage>(socket, "init", 5000);
       return { socket, init };
     },

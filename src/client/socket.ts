@@ -1,4 +1,5 @@
 import { io } from "/vendor/socket.io/socket.io.esm.min.js";
+import type { AutomationReport } from "../shared/automation.ts";
 import { CHALLENGE_REQUIRED, CONNECTION_BLOCKED } from "../shared/challenge.ts";
 import {
   type BlockedMessage,
@@ -15,6 +16,7 @@ import {
 } from "../shared/protocol.ts";
 import { type OnlineCountMessage, onlineCountMessageSchema } from "../shared/stats.ts";
 import type { Validator } from "../shared/validate.ts";
+import { detectAutomation } from "./automation.ts";
 
 export type ConnectionStatus =
   | "connected"
@@ -66,7 +68,16 @@ export type Connection = {
  */
 export function createConnection(handlers: ConnectionHandlers): Connection {
   // 챌린지를 통과했으면 그 토큰을 핸드셰이크에 실어 보낸다.
-  const auth: { challengeToken?: string } = {};
+  //
+  // 자동화 흔적도 함께 보낸다. 서버가 직접 볼 수 없는 것들이라 클라이언트가
+  // 알려줄 수밖에 없고, 그래서 위조도 된다. 숨기는 쪽이 이기는 검사라는 뜻인데,
+  // 그럼에도 넣는 이유는 아무 설정 없이 켠 puppeteer/selenium은 실제로 걸리기
+  // 때문이다. 서버는 이걸 증거가 아니라 점수로 다룬다.
+  //
+  // 접속할 때마다 다시 재지 않는다. 페이지가 살아 있는 동안 결과가 바뀔 일이
+  // 없고, 재연결 폭주 시 window 프로퍼티를 매번 훑을 이유도 없다.
+  const automation: AutomationReport = { signals: detectAutomation() };
+  const auth: { challengeToken?: string; automation: AutomationReport } = { automation };
 
   const socket = io({
     // websocket 전용이면 이를 막는 네트워크에서 접속이 아예 불가능하다.

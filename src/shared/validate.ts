@@ -97,9 +97,18 @@ export function literal<const T extends readonly (string | number | boolean)[]>(
 
 // ---------------------------------------------------------------- 조합
 
-export function arrayOf<T>(item: Validator<T>): Validator<T[]> {
+export function arrayOf<T>(
+  item: Validator<T>,
+  options: { maxItems?: number } = {},
+): Validator<T[]> {
+  const { maxItems } = options;
   return validator((input, path) => {
     if (!Array.isArray(input)) return err(path, `expected an array (received: ${describe(input)})`);
+    // 길이를 먼저 본다. 요소를 하나씩 검사한 뒤에 거절하면, 10만 개짜리 배열을
+    // 보내는 것만으로 검증기를 일하게 만들 수 있다.
+    if (maxItems !== undefined && input.length > maxItems) {
+      return err(path, `expected at most ${maxItems} items (received: ${input.length})`);
+    }
     const out: T[] = [];
     for (const [index, element] of input.entries()) {
       const result = item.parse(element, `${path}[${index}]`);

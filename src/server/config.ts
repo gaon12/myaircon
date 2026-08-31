@@ -1,5 +1,6 @@
 import path from "node:path";
 import { DEVICE_MODES, type DeviceMode } from "../shared/protocol.ts";
+import { AUTOMATION_ACTIONS, type AutomationAction } from "./automation.ts";
 import { isValidTimeZone } from "./device.ts";
 
 const ROOT = path.join(import.meta.dirname, "..", "..");
@@ -138,6 +139,10 @@ export type AppConfig = {
     adminLockSeconds: number;
     challengeScore: number;
     blockScore: number;
+    /** 자동화 흔적이 잡혔을 때 더할 의심 점수. 0이면 감지를 끈다. */
+    automationPoints: number;
+    /** 자동화 흔적이 잡혔을 때의 처리. */
+    automationAction: AutomationAction;
   };
   challenge: {
     /** 작업증명 난이도(앞에서부터 0이어야 하는 비트 수). 올리면 클라이언트가 더 오래 계산한다. */
@@ -251,6 +256,15 @@ export const config: AppConfig = {
     adminLockSeconds: readInt("GUARD_ADMIN_LOCK_SECONDS", 900, { min: 10, max: 86_400 }),
     challengeScore: readInt("GUARD_CHALLENGE_SCORE", 50, { min: 1, max: 100 }),
     blockScore: readInt("GUARD_BLOCK_SCORE", 85, { min: 1, max: 100 }),
+
+    // 자동화 감지. 기본은 "점수만 올린다"이다.
+    // 흔적 대부분이 클라이언트가 보고하는 값이라 위조할 수 있고, 오탐 대상이
+    // 접근성 도구나 자체 모니터링이다. 흔적 하나만으로 차단/챌린지에 닿지
+    // 않게 두고, 다른 행동과 합쳐졌을 때 넘어가게 한다.
+    // 세게 걸려면 GUARD_AUTOMATION_ACTION=challenge 또는 block.
+    // 아예 끄려면 GUARD_AUTOMATION_POINTS=0.
+    automationPoints: readInt("GUARD_AUTOMATION_POINTS", 20, { min: 0, max: 30 }),
+    automationAction: readEnum("GUARD_AUTOMATION_ACTION", AUTOMATION_ACTIONS, "score"),
   },
 
   // 점수가 애매할 때만 띄우는 작업증명. 14비트면 브라우저에서 보통 1초 미만이다.

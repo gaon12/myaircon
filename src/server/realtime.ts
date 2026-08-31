@@ -9,6 +9,7 @@ import type {
   NicknamePayload,
   ServerToClientEvents,
 } from "../shared/protocol.ts";
+import { collectSignals, decide } from "./automation.ts";
 import type { BanStore } from "./ban-store.ts";
 import type { ChallengeIssuer } from "./challenge.ts";
 import { resolveClientIp } from "./client-ip.ts";
@@ -52,6 +53,16 @@ export type RealtimeHandle = {
   disconnectIp: (ip: string) => number;
   stop: () => void;
 };
+
+/** 핸드셰이크 auth는 클라이언트가 준 값이라 형태를 가정할 수 없다. */
+function readChallengeToken(auth: unknown): unknown {
+  if (typeof auth !== "object" || auth === null) return undefined;
+  try {
+    return (auth as Record<string, unknown>).challengeToken;
+  } catch {
+    return undefined;
+  }
+}
 
 export type AppSocketServer = SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
 
@@ -141,6 +152,34 @@ export function registerRealtime(
           return;
         }
 
+        // 자동화 흔적. 점수를 먼저 올리고 나서 점수를 매겨야 이번 판정에
+        // 반영된다.
+        const signals = collectSignals({
+          auth: socket.handshake.auth,
+          userAgent: socket.handshake.headers["user-agent"],
+        });
+        const automation = decide(signals, {
+          points: config.guard.automationPoints,
+          action: config.guard.automationAction,
+        });
+        if (automation.action !== "none") {
+          guard.noteSuspicious(ip, automation.points);
+          // 운영자가 오탐을 알아볼 수 있어야 정책을 조절할 수 있다.
+          logger.info({ ip, signals, action: automation.action }, "automation signals");
+
+          if (automation.action === "block") {
+            next(new Error(CONNECTION_BLOCKED));
+            return;
+          }
+          if (automation.action === "challenge") {
+            const token = readChallengeToken(socket.handshake.auth);
+            if (challenge === undefined || !challenge.isTokenValid(token)) {
+              next(new Error(CHALLENGE_REQUIRED));
+              return;
+            }
+          }
+        }
+
         const score = await guard.score(ip);
         if (score.verdict === "block") {
           logger.warn({ ip, score }, "blocked by behaviour score");
@@ -149,8 +188,7 @@ export function registerRealtime(
         }
         if (score.verdict === "challenge") {
           // 이미 챌린지를 통과한 토큰을 가져왔으면 통과시킨다.
-          const token = (socket.handshake.auth as { challengeToken?: unknown } | undefined)
-            ?.challengeToken;
+          const token = readChallengeToken(socket.handshake.auth);
           if (challenge === undefined || !challenge.isTokenValid(token)) {
             logger.info({ ip, score }, "challenge required");
             next(new Error(CHALLENGE_REQUIRED));

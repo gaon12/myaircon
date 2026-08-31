@@ -483,6 +483,50 @@ kick은 **끊기 + 차단**이다. 끊기만 하면 새로고침 한 번에 돌�
 > 차단하지 않고 확인만 요구한다 — 사무실이나 학교처럼 한 주소를 여럿이 쓰면
 > 정상 사용자도 한도에 걸리기 때문이다.
 
+### 자동화 도구 감지
+
+puppeteer, Selenium, Playwright 같은 도구가 남기는 흔적을 본다.
+
+| 흔적 | 무엇을 보는가 | 출처 |
+|---|---|---|
+| `webdriver` | `navigator.webdriver === true` | 클라이언트 |
+| `selenium` | `document.$cdc_…`, `__webdriver_*`, `<html webdriver>` | 클라이언트 |
+| `playwright` | `window.__playwright*`, `__pw_*` | 클라이언트 |
+| `puppeteer` | `window.__puppeteer_*` | 클라이언트 |
+| `legacy-harness` | `_phantom`, `callPhantom`, `__nightmare`, `domAutomationController` | 클라이언트 |
+| `headless-ua` | User-Agent의 `HeadlessChrome`, `PhantomJS` 등 | 양쪽 |
+| `tool-ua` | User-Agent의 `curl`, `python-requests`, `scrapy` 등 | 서버 |
+
+**기본 동작은 차단이 아니라 점수 가산이다**(`GUARD_AUTOMATION_ACTION=score`).
+세 가지 이유가 있다.
+
+1. 클라이언트가 보고하는 값은 위조할 수 있다. `puppeteer-extra-stealth`
+   같은 도구의 존재 이유가 정확히 이 흔적을 지우는 것이다.
+2. 작업증명 챌린지는 puppeteer를 막지 못한다. 진짜 브라우저라 1초면 푼다.
+   `challenge`로 올려서 실제로 막히는 것은 비브라우저 스크립트뿐이다.
+3. 오탐 대상이 접근성 도구, 자체 모니터링, CI, 링크 미리보기다.
+
+즉 정책을 올려서 얻는 것은 "숨길 생각조차 없는 자동화"를 막는 것이고,
+잃는 것은 위의 정상 클라이언트다. 그 교환은 운영자가 정할 일이라
+`GUARD_AUTOMATION_ACTION=challenge|block`으로 열어 두었다.
+끄려면 `GUARD_AUTOMATION_POINTS=0`.
+
+> **실측.** 헤드리스 Edge 152를 `--remote-debugging-port`로만 띄우면
+> `navigator.webdriver`가 `false`라 `headless-ua` 하나만 잡힌다.
+> `--enable-automation`을 붙이면 `["webdriver", "headless-ua"]`가 된다.
+> 기본 설정의 Selenium/puppeteer는 후자에 해당한다. 다시 말해 **숨기려는
+> 쪽은 이미 첫 번째 줄에서 절반쯤 빠져나간다.** 이 기능의 한계를 정확히
+> 보여주는 숫자라 적어 둔다.
+
+의심 점수의 상한이 30이므로, `GUARD_AUTOMATION_POINTS`를 최대치인 30으로
+두어도 흔적만으로는 챌린지 기준인 50에 닿지 않는다. 설계된 대로다 —
+자동화라는 사실 하나로 사람을 막지 않고, 연타나 재접속 폭주 같은 실제
+행동과 합쳐졌을 때 넘어가게 되어 있다.
+
+HTTP 요청에서는 User-Agent만 보고 점수를 올릴 뿐 절대 막지 않는다.
+UA만 보고 HTTP를 거절하면 가동 감시나 링크 미리보기가 조용히 죽고,
+원인을 찾기가 유난히 어렵다.
+
 ## 실시간 프로토콜
 
 | 방향 | 이벤트 | 페이로드 |
