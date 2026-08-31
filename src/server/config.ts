@@ -122,6 +122,13 @@ export type AppConfig = {
   identitySecret: string | null;
   maxHttpBufferSize: number;
   security: { contentSecurityPolicy: string; hstsMaxAge: number };
+  admin: {
+    /** null이면 관리 API를 아예 등록하지 않는다. */
+    token: string | null;
+    banFile: string;
+    /** kick 시 기본 차단 시간(분). */
+    defaultBanMinutes: number;
+  };
 };
 
 export const config: AppConfig = {
@@ -201,6 +208,20 @@ export const config: AppConfig = {
   // socket.io 페이로드는 닉네임 문자열 하나뿐이라 1KB면 충분하다.
   // 기본값 1MB를 그대로 두면 메모리 낭비/남용 여지가 생긴다.
   maxHttpBufferSize: readInt("MAX_HTTP_BUFFER_SIZE", 1024, { min: 256, max: 1_048_576 }),
+
+  // 관리 API와 관리 페이지. 토큰이 없으면 라우트 자체가 등록되지 않는다.
+  admin: {
+    token: (() => {
+      const raw = readString("ADMIN_TOKEN", "");
+      if (raw === "") return null;
+      if (raw.length < 16) {
+        throw new Error("env ADMIN_TOKEN must be at least 16 characters");
+      }
+      return raw;
+    })(),
+    banFile: readString("BAN_FILE", path.join(ROOT, "data", "bans.db")),
+    defaultBanMinutes: readInt("BAN_DEFAULT_MINUTES", 10, { min: 0, max: 60 * 24 * 365 }),
+  },
 
   security: {
     // 프로덕션에서 문제가 생기면 환경변수로 완화할 수 있게 열어둔다.

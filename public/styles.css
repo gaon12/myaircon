@@ -617,3 +617,101 @@ main {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
+
+/* ------------------------------------------------------------ 관리 화면 */
+
+.admin {
+  max-width: 900px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.admin-title {
+  margin: 16px 0;
+  font-size: 1.1rem;
+}
+
+.admin-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.admin-auth input {
+  flex: 1;
+  min-width: 220px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+.admin-status {
+  margin: 0 0 12px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.admin-status.is-error {
+  color: #c0392b;
+}
+
+:root[data-theme="dark"] .admin-status.is-error {
+  color: #ff8a80;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .admin-status.is-error {
+    color: #ff8a80;
+  }
+}
+
+.admin-table {
+  width: 100%;
+  margin-bottom: 20px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-table th {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.admin-table .mono {
+  font-family: ui-monospace, "SFMono-Regular", "Consolas", monospace;
+  font-size: 0.75rem;
+}
+
+.admin-empty {
+  color: var(--ink-soft);
+}
+
+.link.is-danger {
+  color: #c0392b;
+}
+
+:root[data-theme="dark"] .link.is-danger {
+  color: #ff8a80;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .link.is-danger {
+    color: #ff8a80;
+  }
+}

@@ -1,5 +1,6 @@
 import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
 import type { Server as SocketIOServer } from "socket.io";
+import type { SessionInfo } from "../shared/admin.ts";
 import type {
   ClientToServerEvents,
   DeviceInfo,
@@ -7,6 +8,7 @@ import type {
   NicknamePayload,
   ServerToClientEvents,
 } from "../shared/protocol.ts";
+import type { BanStore } from "./ban-store.ts";
 import { resolveClientIp } from "./client-ip.ts";
 import type { AppConfig } from "./config.ts";
 import { describeDevice } from "./device.ts";
@@ -28,6 +30,8 @@ export type RealtimeDeps = {
   stats?: StatsStore | undefined;
   /** 닉네임에 붙일 표시 태그를 만든다. 없으면 이름만 쓴다. */
   tagger?: IdentityTagger | undefined;
+  /** 차단 목록. 없으면 아무도 막지 않는다. */
+  bans?: BanStore | undefined;
   onChange?: ((temp: number) => void) | undefined;
 };
 
@@ -35,6 +39,10 @@ export type RealtimeHandle = {
   readonly device: DeviceInfo;
   /** 지금 붙어 있는 클라이언트 수. */
   readonly online: number;
+  /** 지금 붙어 있는 연결 목록 (관리자용). */
+  sessions: () => SessionInfo[];
+  /** 해당 주소의 연결을 모두 끊는다. 끊은 수를 돌려준다. */
+  disconnectIp: (ip: string) => number;
   stop: () => void;
 };
 
@@ -43,7 +51,7 @@ export type AppSocketServer = SocketIOServer<ClientToServerEvents, ServerToClien
 /** socket.io 이벤트 핸들러를 등록한다. */
 export function registerRealtime(
   io: AppSocketServer,
-  { thermostat, config, logger, stats, tagger, onChange }: RealtimeDeps,
+  { thermostat, config, logger, stats, tagger, bans, onChange }: RealtimeDeps,
 ): RealtimeHandle {
   const limiter = new RateLimiterMemory({
     points: config.rateLimit.points,
@@ -93,11 +101,40 @@ export function registerRealtime(
   }, config.stats.onlineIntervalMs);
   onlineTimer.unref?.();
 
+  // 내부에서는 갱신할 수 있어야 하지만(마지막 닉네임), 밖으로 나가는 값은
+  // 와이어 타입 그대로다.
+  type MutableSession = { -readonly [K in keyof SessionInfo]: SessionInfo[K] };
+
+  /** socketId -> 연결 정보. 관리 화면과 kick이 쓴다. */
+  const sessions = new Map<string, MutableSession>();
+
+  // 차단된 주소는 핸드셰이크 단계에서 막는다. 연결을 맺고 끊는 것보다 싸고,
+  // 클라이언트에는 접속 실패로 보인다.
+  io.use((socket, next) => {
+    const ip = resolveClientIp(socket.handshake, { trustProxyHops: config.trustProxyHops });
+    const ban = bans?.find(ip) ?? null;
+    if (ban === null) {
+      next();
+      return;
+    }
+    logger.info({ ip, until: ban.until }, "rejected banned client");
+    next(new Error("banned"));
+  });
+
   io.on("connection", (socket) => {
     // 핸드셰이크는 연결당 한 번만 해석하면 된다.
     const clientIp = resolveClientIp(socket.handshake, {
       trustProxyHops: config.trustProxyHops,
     });
+
+    sessions.set(socket.id, {
+      socketId: socket.id,
+      ip: clientIp,
+      tag: tagger?.tag(clientIp) ?? "",
+      nickname: "",
+      connectedAt: Date.now(),
+    });
+    socket.on("disconnect", () => sessions.delete(socket.id));
 
     // 접속 즉시 현재 상태를 보낸다. 온도 범위와 기기 정보까지 함께 내려보내서
     // 클라이언트가 18/30이나 이미지 경로를 하드코딩하지 않아도 되게 한다.
@@ -128,6 +165,10 @@ export function registerRealtime(
       // 붙여 구분한다. 클라이언트가 위조할 수 없는 값이다.
       const nickname = normalizeNickname(rawNickname, config.nickname);
       const username = tagger === undefined ? nickname : tagger.label(nickname, clientIp);
+
+      // 관리 화면에서 "누가 붙어 있나"를 보려면 마지막으로 쓴 이름이 필요하다.
+      const session = sessions.get(socket.id);
+      if (session !== undefined) session.nickname = nickname;
 
       // 2) rate limit. 한도 초과는 RateLimiterRes(Error가 아님)로, 스토어
       //    장애는 진짜 Error로 reject된다. 둘을 구분해야 장애를 트래픽 탓으로
@@ -167,6 +208,19 @@ export function registerRealtime(
     },
     get online() {
       return io.engine.clientsCount;
+    },
+    sessions() {
+      return [...sessions.values()].sort((a, b) => a.connectedAt - b.connectedAt);
+    },
+    disconnectIp(ip) {
+      let count = 0;
+      for (const session of [...sessions.values()]) {
+        if (session.ip !== ip) continue;
+        io.sockets.sockets.get(session.socketId)?.disconnect(true);
+        sessions.delete(session.socketId);
+        count += 1;
+      }
+      return count;
     },
     stop() {
       clearInterval(seasonTimer);

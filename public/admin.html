@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>myaircon 관리</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+
+  <body class="admin">
+    <h1 class="admin-title">myaircon 관리</h1>
+
+    <form class="admin-auth" data-auth-form>
+      <label class="field-label" for="token">관리 토큰</label>
+      <input id="token" data-token type="password" autocomplete="current-password" />
+      <button type="submit" class="pill">불러오기</button>
+    </form>
+
+    <p class="admin-status" data-status role="status" aria-live="polite"></p>
+
+    <section class="stat-block" hidden data-panel>
+      <h2 class="stat-heading">접속 중 (<span data-online>0</span>)</h2>
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th scope="col">태그</th>
+            <th scope="col">닉네임</th>
+            <th scope="col">주소</th>
+            <th scope="col">접속</th>
+            <th scope="col"><span class="visually-hidden">작업</span></th>
+          </tr>
+        </thead>
+        <tbody data-sessions></tbody>
+      </table>
+
+      <h2 class="stat-heading">차단 목록</h2>
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th scope="col">태그</th>
+            <th scope="col">주소</th>
+            <th scope="col">해제까지</th>
+            <th scope="col">사유</th>
+            <th scope="col"><span class="visually-hidden">작업</span></th>
+          </tr>
+        </thead>
+        <tbody data-bans></tbody>
+      </table>
+
+      <p class="stat-note">
+        차단은 접속 주소 기준입니다. VPN이나 모바일 IP 변경으로 우회될 수 있습니다.
+      </p>
+    </section>
+
+    <script type="module" src="/js/client/admin.js"></script>
+  </body>
+</html>

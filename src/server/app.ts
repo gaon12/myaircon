@@ -4,6 +4,8 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { Server as SocketIOServer } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/protocol.ts";
+import { registerAdmin } from "./admin.ts";
+import { BanStore } from "./ban-store.ts";
 import { type AppConfig, config as defaultConfig } from "./config.ts";
 import { createIdentityTagger, generateIdentitySecret } from "./identity.ts";
 import { type AppSocketServer, type RealtimeHandle, registerRealtime } from "./realtime.ts";
@@ -33,6 +35,7 @@ export type AppContext = {
   stats: StatsStore;
   config: AppConfig;
   realtime: RealtimeHandle;
+  bans: BanStore;
 };
 
 /**
@@ -74,6 +77,13 @@ export async function buildApp({
     recentSize: config.stats.recentSize,
     retentionHours: config.stats.retentionHours,
     flushIntervalMs: config.stats.flushIntervalMs,
+    logger: app.log,
+  });
+
+  const bans = new BanStore({
+    file: config.admin.banFile,
+    // 관리 API가 꺼져 있으면 차단을 걸 수단도 없으므로 저장소를 열지 않는다.
+    enabled: config.admin.token !== null,
     logger: app.log,
   });
 
@@ -148,8 +158,11 @@ export async function buildApp({
     logger: app.log,
     stats,
     tagger,
+    bans,
     onChange: (temp) => store.schedule({ temp }),
   });
+
+  registerAdmin(app, { config, realtime, bans, tagger });
 
   // realtime이 기기 종류를 들고 있으므로 그 뒤에 등록한다.
   app.get("/healthz", async () => ({
@@ -170,7 +183,7 @@ export async function buildApp({
     return stats.snapshot(realtime.online);
   });
 
-  return { app, io, thermostat, store, stats, config, realtime };
+  return { app, io, thermostat, store, stats, config, realtime, bans };
 }
 
 /**
@@ -205,11 +218,19 @@ function resolveIdentitySecret(
  * app.close()가 ERR_SERVER_NOT_RUNNING을 만난다. 그래서 소켓과 engine.io
  * 타이머만 직접 정리하고 서버 종료는 Fastify에 맡긴다.
  */
-export async function closeApp({ app, io, store, stats, realtime }: AppContext): Promise<void> {
+export async function closeApp({
+  app,
+  io,
+  store,
+  stats,
+  realtime,
+  bans,
+}: AppContext): Promise<void> {
   realtime.stop();
   io.disconnectSockets(true);
   io.engine.close();
   await app.close();
   await store.flush();
   stats.close();
+  bans.close();
 }
