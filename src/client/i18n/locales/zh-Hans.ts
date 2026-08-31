@@ -59,6 +59,7 @@ export default {
   timeMinutes: (count: number) => `${count} 分钟前`,
   timeHours: (count: number) => `${count} 小时前`,
   statsError: "无法加载统计数据",
+  blockedTitle: "连接已被限制",
   verifyTitle: "需要简单验证",
   verifyBody: "正在确认您不是自动客户端，请稍候。",
   verifyProgress: (attempts: number) => `验证中…（已尝试 ${attempts.toLocaleString()} 次）`,

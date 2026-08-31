@@ -17,7 +17,14 @@ Web Audio API로 만든 브라운 노이즈가 온도에 따라 음량을 바꾼
 
 ## 요구 사항
 
-- Node.js **24 이상**
+- 서버: Node.js **24 이상**
+- 브라우저: Chrome 93+ · Edge 93+ · Firefox 98+ · Safari 15.4+
+
+  더 오래된 브라우저(IE 포함)에는 앱 대신 안내만 보여준다. 반쯤 동작하는
+  화면을 내놓으면 사용자가 무엇이 문제인지 알 수 없기 때문이다.
+  IE처럼 ES 모듈을 모르는 브라우저는 `<script nomodule>`이,
+  모듈은 되지만 API가 없는 중간 세대는 `src/client/compat.ts`가 잡는다.
+  하한을 정하는 것은 사실상 `<dialog>.showModal`이다.
 
 ## 실행
 
@@ -247,7 +254,7 @@ src/
     app.ts          Fastify + socket.io 조립 (listen 안 함)
     server.ts       부트스트랩 / 시그널 처리
   client/
-    app.ts        진입점. DOM 배선과 상태
+    app.ts        진입점. 브라우저 확인만 하고 통과하면 main.ts를 부른다
     dom.ts        필수 요소 조회 (없으면 시작 시점에 던진다)
     socket.ts     서버 연결 생명주기 + 수신 메시지 검증
     audio.ts      브라운 노이즈 재생, 게인 스테이징
@@ -256,12 +263,16 @@ src/
     theme.ts      라이트/다크 테마
     stats.ts      통계 화면(순위·최근 기록·활동 그래프)
     admin.ts      관리 화면
-    challenge.ts  작업증명 풀이
+    challenge.ts  작업증명 풀이, 캐릭터 선택
+    compat.ts     브라우저 기능 확인
+    main.ts       앱 본체 (compat 통과 시 동적 import)
     i18n/         로케일 등록, BCP-47 협상, Locale 계약
 public/
   index.html      마크업 (인라인 script/style 없음)
   admin.html      관리 화면
   robots.txt
+  img/            확인 화면 캐릭터 (webp)
+assets/img-src/   캐릭터 원본 PNG (gitignore, 서빙 안 함)
 deploy/           리버스 프록시 설정 예시
   styles.css
 test/             Node 내장 러너 기반 테스트 (*.test.ts)
@@ -450,6 +461,14 @@ kick은 **끊기 + 차단**이다. 끊기만 하면 새로고침 한 번에 돌�
 확인은 작업증명이다. `sha256(nonce + 답)`의 앞 14비트가 0인 답을 찾게 한다.
 브라우저에서 보통 1초 미만이고, 서버 검증은 해시 한 번(실측 0.38ms)이다.
 외부 서비스도, 쿠키도, 개인정보도 쓰지 않는다.
+
+확인 화면에는 캐릭터가 하나 나온다. 방문마다 셋 중 하나를 무작위로 고르고,
+확인 중에는 `scan`, 막혔을 때는 `catch` 포즈를 쓴다 — 같은 캐릭터로 이어져야
+한 사람이 쫓아온 것처럼 읽힌다. 이미지는 `public/img/`에 있다.
+
+> 원본은 1254px PNG 6장 합계 7.3MB였다. 640px WebP로 변환해 **416KB(5%)**로
+> 줄였고, 알파는 유지된다. 원본은 `assets/img-src/`에 두되 서빙하지도
+> 커밋하지도 않는다. 다시 만드는 명령은 `.gitignore`에 적어 두었다.
 
 > **왜 Anubis처럼 모두에게 걸지 않나.**
 > 그 방식은 렌더링이 비싼 페이지를 대량 크롤링에서 지키는 도구다. 이 앱의

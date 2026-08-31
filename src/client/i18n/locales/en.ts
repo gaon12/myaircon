@@ -60,6 +60,7 @@ export default {
   timeMinutes: (count: number) => `${count}m ago`,
   timeHours: (count: number) => `${count}h ago`,
   statsError: "Could not load statistics",
+  blockedTitle: "Connection blocked",
   verifyTitle: "Quick check",
   verifyBody: "Making sure you are not an automated client. This only takes a moment.",
   verifyProgress: (attempts: number) => `Checking… (${attempts.toLocaleString()} attempts)`,

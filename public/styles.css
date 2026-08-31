@@ -715,3 +715,87 @@ main {
     color: #ff8a80;
   }
 }
+
+/* ------------------------------------------------------------ 확인 화면 */
+
+.dialog-verify {
+  width: min(340px, calc(100vw - 32px));
+  text-align: center;
+}
+
+/* 캐릭터는 장식이다. 문구가 정보를 전달하고 이미지는 분위기만 맡는다.
+   그래서 alt는 비워 두고(마크업 참고) 스크린 리더가 건너뛰게 한다. */
+.verify-character {
+  display: block;
+  width: 180px;
+  height: auto;
+  margin: 0 auto 8px;
+}
+
+.verify-title {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.dialog-verify p {
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+
+.dialog-verify .pill {
+  margin-top: 12px;
+}
+
+/* ------------------------------------------------------------ 구형 브라우저 */
+
+/* 평소에는 숨어 있다가, compat 검사나 nomodule 스크립트가 클래스를 달면 나온다.
+   <noscript> 안에서는 스크립트가 아예 돌지 않으므로 직접 보이게 한다. */
+.legacy-notice {
+  display: none;
+}
+
+.legacy-notice.is-visible,
+.is-legacy .legacy-notice {
+  display: block;
+  max-width: 34rem;
+  margin: 15vh auto;
+  padding: 0 20px;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.legacy-notice h1 {
+  margin-bottom: 12px;
+  font-size: 1.2rem;
+}
+
+.legacy-notice p {
+  margin: 6px 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.legacy-notice .legacy-hint {
+  font-size: 0.75rem;
+}
+
+/* 지원되지 않는 브라우저에는 앱을 아예 보여주지 않는다. 반쯤 동작하는 화면을
+   내놓으면 사용자는 무엇이 문제인지 알 수 없다. */
+/* 특이도만으로 충분하다. .is-legacy가 붙으면 각 규칙이 원래 것을 이긴다.
+   dialog는 UA 스타일시트가 display를 정하지만 작성자 스타일이 우선한다. */
+.is-legacy main,
+.is-legacy .footer,
+.is-legacy dialog {
+  display: none;
+}
+
+/* ------------------------------------------------------------ 마지막 */
+
+/* hidden 속성은 UA 스타일시트에서 display:none이지만, .pill 같은 작성자 규칙의
+   display:inline-flex가 같은 특이도로 이를 덮어버린다(실제로 확인 화면의
+   "다시 시도" 버튼이 숨겨지지 않았다). 같은 특이도에서는 뒤에 온 규칙이
+   이기므로 이 파일 맨 끝에 둔다. */
+[hidden] {
+  display: none;
+}

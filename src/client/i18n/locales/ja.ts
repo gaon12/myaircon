@@ -59,6 +59,7 @@ export default {
   timeMinutes: (count: number) => `${count}分前`,
   timeHours: (count: number) => `${count}時間前`,
   statsError: "統計を読み込めませんでした",
+  blockedTitle: "接続が制限されました",
   verifyTitle: "確認が必要です",
   verifyBody: "自動接続でないことを確認しています。少々お待ちください。",
   verifyProgress: (attempts: number) => `確認中… (${attempts.toLocaleString()}回試行)`,

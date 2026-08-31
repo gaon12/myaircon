@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { afterEach, describe, it } from "node:test";
 import type { LightMyRequestResponse } from "fastify";
+import { CHARACTER_COUNT, pickCharacter } from "../src/client/challenge.ts";
 import { ChallengeIssuer, meetsDifficulty } from "../src/server/challenge.ts";
 import { Guard, type GuardOptions } from "../src/server/guard.ts";
 import { once, startTestServer, type TestServer } from "./helpers.ts";
@@ -374,5 +375,58 @@ describe("서버에 붙은 방어", () => {
     }
     const score = await server.guard.score("127.0.0.1");
     assert.equal(score.verdict, "allow", `총점 ${score.total}`);
+  });
+});
+
+describe("확인 화면 캐릭터", () => {
+  it("1~3 사이의 번호를 고른다", () => {
+    for (let i = 0; i < 200; i++) {
+      const picked = pickCharacter();
+      assert.ok(
+        Number.isInteger(picked) && picked >= 1 && picked <= CHARACTER_COUNT,
+        String(picked),
+      );
+    }
+  });
+
+  it("난수 경계를 정확히 나눈다", () => {
+    assert.equal(
+      pickCharacter(() => 0),
+      1,
+    );
+    assert.equal(
+      pickCharacter(() => 0.33),
+      1,
+    );
+    assert.equal(
+      pickCharacter(() => 0.34),
+      2,
+    );
+    assert.equal(
+      pickCharacter(() => 0.67),
+      3,
+    );
+    // Math.random()은 1을 돌려주지 않지만, 1에 아주 가까운 값에서도 범위를 넘지 않아야 한다
+    assert.equal(
+      pickCharacter(() => 0.999999),
+      CHARACTER_COUNT,
+    );
+  });
+
+  it("여러 번 고르면 세 캐릭터가 모두 나온다", () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 500; i++) seen.add(pickCharacter());
+    assert.equal(seen.size, CHARACTER_COUNT, `나온 캐릭터: ${[...seen].sort().join(", ")}`);
+  });
+
+  it("캐릭터마다 scan/catch 이미지가 실제로 있다", async () => {
+    const { access } = await import("node:fs/promises");
+    const path = await import("node:path");
+    const root = path.join(import.meta.dirname, "..", "public", "img");
+    for (let n = 1; n <= CHARACTER_COUNT; n++) {
+      for (const pose of ["scan", "catch"]) {
+        await access(path.join(root, `${pose}_${n}.webp`));
+      }
+    }
   });
 });

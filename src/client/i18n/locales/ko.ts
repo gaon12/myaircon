@@ -59,6 +59,7 @@ export default {
   timeMinutes: (count: number) => `${count}분 전`,
   timeHours: (count: number) => `${count}시간 전`,
   statsError: "통계를 불러오지 못했습니다",
+  blockedTitle: "접속이 제한되었습니다",
   verifyTitle: "잠시 확인이 필요합니다",
   verifyBody: "자동 접속이 아닌지 확인하는 중입니다. 잠시만 기다려 주세요.",
   verifyProgress: (attempts: number) => `확인 중… (${attempts.toLocaleString()}회 시도)`,

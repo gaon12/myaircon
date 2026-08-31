@@ -70,6 +70,7 @@ export type Locale = {
   readonly timeHours: (count: number) => string;
   readonly statsError: string;
 
+  readonly blockedTitle: string;
   readonly verifyTitle: string;
   readonly verifyBody: string;
   readonly verifyProgress: (attempts: number) => string;
