@@ -26,6 +26,12 @@
   --focus: #2f6fed;
   --backdrop: rgb(0 0 0 / 35%);
 
+  /* 차트 색. 계열이 하나뿐이라 한 색만 쓴다.
+     대비 실측: #2a78d6 on #ffffff = 4.42:1 (마크 기준 3:1 통과).
+     0인 시간대는 데이터가 아니라 바닥선이므로 흐린 회색을 쓴다. */
+  --series-1: #2a78d6;
+  --series-empty: #e4e6ea;
+
   /* 에어컨 본체 그림은 테마와 무관하게 항상 흰색이다. 그 위에 얹히는 온도
      텍스트까지 --ink로 칠하면 다크 모드에서 흰 글자가 흰 본체 위에 놓여
      사라진다. 기기 위에 올라가는 글자는 테마와 무관하게 어두운 색으로 고정한다.
@@ -80,6 +86,10 @@
     --focus: #79a6ff;
     --backdrop: rgb(0 0 0 / 60%);
 
+    /* 어두운 배경용 같은 계열 단계. #3987e5 on #1d2026 = 4.48:1 */
+    --series-1: #3987e5;
+    --series-empty: #2b3038;
+
     /* screen 합성으로 바람이 배경을 덮는 대신 빛을 더하게 만든다. */
     --air-blend: screen;
   }
@@ -101,6 +111,9 @@
 
   --focus: #79a6ff;
   --backdrop: rgb(0 0 0 / 60%);
+
+  --series-1: #3987e5;
+  --series-empty: #2b3038;
 
   --air-blend: screen;
 }
@@ -439,4 +452,168 @@ main {
   .select {
     font-size: 0.7rem;
   }
+}
+
+/* ------------------------------------------------------------ 통계 */
+
+.dialog-stats {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(78vh, 680px);
+  overflow-y: auto;
+}
+
+.footer-online {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-online {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-block {
+  margin-top: 18px;
+}
+
+.stat-heading {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.stat-note {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.stat-mine {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 탭 */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tab {
+  flex: 1;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.tab.is-selected {
+  border-color: transparent;
+  background: var(--control-bg);
+  color: var(--control-fg);
+}
+
+/* 순위 / 최근 기록 */
+
+.rank-list,
+.recent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+
+.rank-row,
+.recent-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.rank-row:last-child,
+.recent-row:last-child {
+  border-bottom: 0;
+}
+
+.rank-place {
+  width: 1.4em;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-name,
+.recent-name {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.rank-count,
+.recent-temp {
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-empty {
+  padding: 10px 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+/* 방향은 화살표 모양과 위치로 읽힌다. 색은 보조일 뿐이고,
+   의미는 요소의 aria-label이 따로 전달한다. */
+.recent-arrow {
+  font-size: 0.65rem;
+  color: var(--ink-soft);
+}
+
+.recent-time {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.recent-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* 시간대별 활동 차트 */
+
+.chart {
+  display: block;
+  width: 100%;
+  height: 72px;
+}
+
+/* 막대 사이는 테두리가 아니라 배경색 여백으로 구분한다(렌더러가 폭에서 2px를 뺀다). */
+.chart .bar {
+  fill: var(--series-1);
+}
+
+/* 축은 눈에 띄면 안 된다. 실선 hairline 하나로 0의 위치만 알려준다. */
+.chart .chart-baseline {
+  stroke: var(--series-empty);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart .bar:hover,
+.chart .bar:focus-visible {
+  /* 값을 가리지 않도록 색은 그대로 두고 테두리만 준다. */
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
 }

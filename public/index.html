@@ -112,6 +112,7 @@
       <select id="language" class="select" data-language></select>
       <label class="visually-hidden" for="theme" data-i18n="theme">테마</label>
       <select id="theme" class="select" data-theme-select></select>
+      <span class="footer-online" data-footer-online aria-live="polite" hidden></span>
       <button type="button" class="link" data-show-stats data-i18n="stats">통계</button>
       <button type="button" class="link" data-show-about data-i18n="about">정보</button>
     </footer>
@@ -131,9 +132,62 @@
       </form>
     </dialog>
 
-    <dialog class="dialog" data-stats-dialog>
-      <p><span data-i18n="plusCount">＋ 누른 횟수</span>: <span data-plus-count>0</span></p>
-      <p><span data-i18n="minusCount">－ 누른 횟수</span>: <span data-minus-count>0</span></p>
+    <dialog class="dialog dialog-stats" data-stats-dialog>
+      <p class="stat-online" data-online-count aria-live="polite">—</p>
+
+      <section class="stat-block">
+        <h2 class="stat-heading" data-i18n="rankTitle">많이 바꾼 사람</h2>
+        <div class="tabs" role="tablist" data-rank-tabs>
+          <button
+            type="button"
+            class="tab is-selected"
+            role="tab"
+            aria-selected="true"
+            data-rank-period="today"
+            data-i18n="rankToday"
+          >
+            오늘
+          </button>
+          <button
+            type="button"
+            class="tab"
+            role="tab"
+            aria-selected="false"
+            data-rank-period="allTime"
+            data-i18n="rankAllTime"
+          >
+            역대
+          </button>
+        </div>
+        <ol class="rank-list" data-rank-list></ol>
+        <p class="stat-note" data-i18n="rankNote">이름 기준 집계입니다</p>
+      </section>
+
+      <section class="stat-block">
+        <h2 class="stat-heading" data-i18n="hourlyTitle">최근 24시간 활동</h2>
+        <svg class="chart" data-hourly-chart preserveAspectRatio="none" role="img">
+          <title data-hourly-title>최근 24시간 활동</title>
+        </svg>
+        <p class="stat-note" data-hourly-caption aria-live="polite"></p>
+      </section>
+
+      <section class="stat-block">
+        <h2 class="stat-heading" data-i18n="recentTitle">최근 기록</h2>
+        <ol class="recent-list" data-recent-list></ol>
+      </section>
+
+      <section class="stat-block">
+        <h2 class="stat-heading" data-i18n="myStats">내 기록</h2>
+        <p class="stat-mine">
+          <span data-i18n="plusCount">＋ 누른 횟수</span>
+          <span data-plus-count>0</span>
+        </p>
+        <p class="stat-mine">
+          <span data-i18n="minusCount">－ 누른 횟수</span>
+          <span data-minus-count>0</span>
+        </p>
+      </section>
+
       <button type="button" class="pill" data-close-dialog data-i18n="close" autofocus>닫기</button>
     </dialog>
 

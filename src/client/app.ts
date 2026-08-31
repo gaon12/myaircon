@@ -6,11 +6,13 @@ import type {
   InitMessage,
   TempChangeMessage,
 } from "../shared/protocol.ts";
+import type { RankPeriod } from "../shared/stats.ts";
 import { BrownNoise, gainForTemperature } from "./audio.ts";
 import { requireElement } from "./dom.ts";
 import { type Locale, type LocaleCode, localeOptions, locales, pickLocale } from "./i18n/index.ts";
 import type { PlainStringKey } from "./i18n/locale.ts";
 import { type ConnectionStatus, createConnection } from "./socket.ts";
+import { fetchStats, renderStats, type StatsElements } from "./stats.ts";
 import { incrementCount, readCount, readValue, writeValue } from "./storage.ts";
 import { createTheme, THEMES, type Theme } from "./theme.ts";
 
@@ -39,6 +41,23 @@ const els = {
   themeSelect: requireElement("[data-theme-select]", HTMLSelectElement),
   showStats: requireElement("[data-show-stats]", HTMLButtonElement),
   showAbout: requireElement("[data-show-about]", HTMLButtonElement),
+  footerOnline: requireElement("[data-footer-online]", HTMLSpanElement),
+  statsOnline: requireElement("[data-online-count]", HTMLParagraphElement),
+  rankList: requireElement("[data-rank-list]", HTMLOListElement),
+  recentList: requireElement("[data-recent-list]", HTMLOListElement),
+  chart: requireElement("[data-hourly-chart]", SVGSVGElement),
+  chartCaption: requireElement("[data-hourly-caption]", HTMLParagraphElement),
+};
+
+const rankTabs = [...document.querySelectorAll<HTMLButtonElement>("[data-rank-period]")];
+
+const statsElements: StatsElements = {
+  online: els.statsOnline,
+  rankTabs,
+  rankList: els.rankList,
+  recentList: els.recentList,
+  chart: els.chart,
+  chartCaption: els.chartCaption,
 };
 
 type AppState = {
@@ -59,6 +78,9 @@ type AppState = {
   min: number;
   max: number;
   temp: number;
+  rankPeriod: RankPeriod;
+  /** 서버가 알려준 접속자 수. 아직 모르면 null. (위 online은 모드 on/off다) */
+  onlineCount: number | null;
 };
 
 const state: AppState = {
@@ -70,6 +92,8 @@ const state: AppState = {
   min: 18,
   max: 30,
   temp: 18,
+  rankPeriod: "today",
+  onlineCount: null,
 };
 
 const audio = new BrownNoise();
@@ -160,6 +184,15 @@ function transientText(element: HTMLElement, text: string): void {
   );
 }
 
+/** 푸터의 접속자 수. 온라인일 때만 보여준다. */
+function renderOnline(): void {
+  const count = state.onlineCount;
+  els.footerOnline.hidden = count === null || count <= 0;
+  if (count !== null && count > 0) {
+    els.footerOnline.textContent = strings.onlineCount(count);
+  }
+}
+
 function setOnlineLabel(text: string, pressed: boolean): void {
   els.online.textContent = text;
   els.online.setAttribute("aria-pressed", String(pressed));
@@ -203,6 +236,11 @@ const connection = createConnection({
 
   onBlocked({ retryAfterMs }: BlockedMessage) {
     transientText(els.notice, strings.rateLimited(Math.max(1, Math.ceil(retryAfterMs / 1000))));
+  },
+
+  onOnlineCount({ online }) {
+    state.onlineCount = online;
+    renderOnline();
   },
 
   onStatus(status: ConnectionStatus) {
@@ -326,7 +364,10 @@ function renderStrings(): void {
   );
   setSoundLabel();
   renderTemperature();
+  renderOnline();
   buildThemeOptions();
+  // 통계 다이얼로그가 열려 있으면 새 언어로 다시 그린다.
+  if (els.statsDialog.open) void loadStats();
 }
 
 function setLocale(code: string): void {
@@ -386,10 +427,50 @@ els.themeSelect.addEventListener("change", () => {
   if ((THEMES as readonly string[]).includes(next)) theme.set(next as Theme);
 });
 
+/**
+ * 통계는 서버가 밀어주지 않고 열 때 가져온다. 버튼을 누를 때마다 접속자
+ * 전원에게 보내면 사람 수에 비례해 비용이 늘지만, 이렇게 하면 다이얼로그를
+ * 여는 순간에만 요청 하나가 나간다.
+ */
+let statsRequest: AbortController | null = null;
+
+async function loadStats(): Promise<void> {
+  statsRequest?.abort();
+  const controller = new AbortController();
+  statsRequest = controller;
+  try {
+    const snapshot = await fetchStats(controller.signal);
+    if (controller.signal.aborted) return;
+    if (snapshot === null) {
+      els.statsOnline.textContent = strings.statsError;
+      return;
+    }
+    state.onlineCount = snapshot.online;
+    renderOnline();
+    renderStats(statsElements, snapshot, state.rankPeriod, strings);
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      console.warn("통계를 가져오지 못했습니다", error);
+      els.statsOnline.textContent = strings.statsError;
+    }
+  }
+}
+
+for (const tab of rankTabs) {
+  tab.addEventListener("click", () => {
+    const period = tab.dataset.rankPeriod;
+    if (period !== "today" && period !== "allTime") return;
+    if (period === state.rankPeriod) return;
+    state.rankPeriod = period;
+    void loadStats();
+  });
+}
+
 els.showStats.addEventListener("click", () => {
   els.plusCount.textContent = String(readCount("plus"));
   els.minusCount.textContent = String(readCount("minus"));
   els.statsDialog.showModal();
+  void loadStats();
 });
 els.showAbout.addEventListener("click", () => els.aboutDialog.showModal());
 for (const button of document.querySelectorAll("[data-close-dialog]")) {

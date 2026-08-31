@@ -12,6 +12,7 @@ import {
   type TempChangeMessage,
   tempChangeMessageSchema,
 } from "../shared/protocol.ts";
+import { type OnlineCountMessage, onlineCountMessageSchema } from "../shared/stats.ts";
 import type { Validator } from "../shared/validate.ts";
 
 export type ConnectionStatus = "connected" | "disconnected" | "error" | "server-error";
@@ -21,6 +22,7 @@ export type ConnectionHandlers = {
   onTempChange: (message: TempChangeMessage) => void;
   onBlocked: (message: BlockedMessage) => void;
   onDeviceChange: (message: DeviceChangeMessage) => void;
+  onOnlineCount: (message: OnlineCountMessage) => void;
   onStatus: (status: ConnectionStatus, detail?: unknown) => void;
   /** 서버가 형태에 맞지 않는 메시지를 보냈을 때 */
   onProtocolError?: ((event: string, error: string) => void) | undefined;
@@ -98,6 +100,7 @@ export function createConnection(handlers: ConnectionHandlers): Connection {
     "deviceChange",
     guard("deviceChange", deviceChangeMessageSchema, handlers.onDeviceChange),
   );
+  socket.on("onlineCount", guard("onlineCount", onlineCountMessageSchema, handlers.onOnlineCount));
 
   return {
     get connected() {

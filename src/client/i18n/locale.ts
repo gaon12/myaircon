@@ -51,6 +51,25 @@ export type Locale = {
   readonly themeLight: string;
   readonly themeDark: string;
 
+  readonly online: string;
+  readonly onlineCount: (count: number) => string;
+  readonly myStats: string;
+  readonly rankTitle: string;
+  readonly rankToday: string;
+  readonly rankAllTime: string;
+  readonly rankNote: string;
+  readonly rankEmpty: string;
+  readonly changesUnit: (count: number) => string;
+  readonly hourlyTitle: string;
+  readonly hourlySummary: (total: number) => string;
+  readonly hourlyDetail: (hour: number, changes: number, average: number) => string;
+  readonly recentTitle: string;
+  readonly recentEmpty: string;
+  readonly timeJustNow: string;
+  readonly timeMinutes: (count: number) => string;
+  readonly timeHours: (count: number) => string;
+  readonly statsError: string;
+
   readonly aboutLines: (device: string) => readonly string[];
 };
 
