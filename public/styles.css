@@ -243,6 +243,11 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 정중앙보다 살짝 위로. box-sizing: border-box라 이 패딩만큼 콘텐츠 상자가
+     아래에서 줄고, 그 안에서 가운데 정렬되므로 글자는 절반인 10px 올라간다.
+     비율이 아니라 고정값이라 기기가 작아질수록 상대적으로 더 많이 올라간다
+     (아래 실측 참고). 의도한 것이다. */
+  padding-bottom: 20px;
   /* 이 글자만 에어컨 본체(항상 흰색) 위에 얹힌다. */
   color: var(--on-device-ink);
   font-size: clamp(16px, calc(var(--aircon-width) * 0.058), 28px);
