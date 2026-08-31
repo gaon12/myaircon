@@ -425,7 +425,7 @@ describe("확인 화면 캐릭터", () => {
     const root = path.join(import.meta.dirname, "..", "public", "img");
     for (let n = 1; n <= CHARACTER_COUNT; n++) {
       for (const pose of ["scan", "catch"]) {
-        await access(path.join(root, `${pose}_${n}.webp`));
+        await access(path.join(root, `${pose}_${n}.png`));
       }
     }
   });

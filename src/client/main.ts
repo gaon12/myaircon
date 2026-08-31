@@ -69,7 +69,7 @@ const character = pickCharacter();
  */
 function showVerifyDialog(mode: "scanning" | "caught"): void {
   const scanning = mode === "scanning";
-  els.verifyImage.src = `/img/${scanning ? "scan" : "catch"}_${character}.webp`;
+  els.verifyImage.src = `/img/${scanning ? "scan" : "catch"}_${character}.png`;
   els.verifyTitle.textContent = scanning ? strings.verifyTitle : strings.blockedTitle;
   els.verifyBody.textContent = scanning ? strings.verifyBody : strings.connectionBlocked;
   els.verifyProgress.textContent = "";

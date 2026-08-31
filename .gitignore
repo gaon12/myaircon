@@ -22,9 +22,13 @@ coverage/
 .nyc_output/
 *.tsbuildinfo
 
-# 이미지 원본. public/img/ 에는 webp로 변환한 것만 두고, 1254px PNG 원본은
-# 서빙하지도 커밋하지도 않는다 (6장 합계 7.3MB -> 416KB).
-# 다시 만들려면: ffmpeg -i in.png -vf scale=640:640:flags=lanczos #                       -c:v libwebp -pix_fmt yuva420p -quality 82 out.webp
+# 이미지 원본. public/img/ 에는 640px png-8로 줄인 것만 두고, 1254px PNG
+# 원본은 서빙하지도 커밋하지도 않는다 (6장 합계 7.3MB -> 408KB).
+# webp가 아니라 png인 이유는 README의 "확인 화면 캐릭터"에 적어 두었다.
+# 다시 만들려면 (Pillow. 아래 그대로 돌리면 커밋된 파일과 바이트까지 같다):
+#   from PIL import Image
+#   img = Image.open("in.png").convert("RGBA").resize((640, 640), Image.LANCZOS)
+#   img.quantize(colors=255, method=Image.FASTOCTREE).save("out.png", optimize=True)
 assets/img-src/
 
 # TypeScript 산출물. 소스는 src/ 이며 tsc가 아래로 뱉는다.

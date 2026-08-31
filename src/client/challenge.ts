@@ -14,7 +14,7 @@ import { type Challenge, challengeSchema, verifyResponseSchema } from "../shared
 
 const REPORT_EVERY = 2000;
 
-/** 확인 화면에 나오는 캐릭터 수. public/img/{scan,catch}_N.webp */
+/** 확인 화면에 나오는 캐릭터 수. public/img/{scan,catch}_N.png */
 export const CHARACTER_COUNT = 3;
 
 /**
