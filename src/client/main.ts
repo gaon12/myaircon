@@ -311,17 +311,29 @@ const connection = createConnection({
 function adjust(direction: Direction): void {
   incrementCount(direction === "up" ? "plus" : "minus");
 
+  const next = direction === "up" ? state.temp + 1 : state.temp - 1;
+
+  // 이미 끝에 닿아 있으면 서버에 보내지 않는다.
+  //
+  // 예전에는 온라인일 때 무조건 보냈다. 서버는 값을 고정한 뒤 changed:false로
+  // 답하지만, **그 요청도 rate limit 한 칸을 먹는다.** 30도에서 +를 몇 번 더
+  // 누르면 아무것도 바뀌지 않았는데 "너무 잦은 요청"이 뜨는 이유였다.
+  // 바뀔 것이 없다는 것은 클라이언트도 아는 사실이니 여기서 멈춘다.
+  //
+  // 서버 쪽 계산은 그대로 둔다. 이건 정상 사용자의 낭비를 없애는 것이지
+  // 방어를 대신하는 것이 아니다 -- 우리 클라이언트를 쓰지 않는 쪽은 여전히
+  // 보낼 수 있고, 그때는 서버가 세는 것이 맞다.
+  if (next < state.min || next > state.max) {
+    transientText(els.notice, direction === "up" ? strings.atMax : strings.atMin);
+    return;
+  }
+
   if (state.online) {
     // 온라인에서는 서버가 진실이다. 낙관적 갱신을 하지 않고 tempChange를 기다린다.
     connection.step(direction, state.username);
     return;
   }
 
-  const next = direction === "up" ? state.temp + 1 : state.temp - 1;
-  if (next < state.min || next > state.max) {
-    transientText(els.notice, direction === "up" ? strings.atMax : strings.atMin);
-    return;
-  }
   state.temp = next;
   renderTemperature();
   audio.setGain(currentGain(next));
