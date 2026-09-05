@@ -17,6 +17,7 @@ import {
 import { type OnlineCountMessage, onlineCountMessageSchema } from "../shared/stats.ts";
 import type { Validator } from "../shared/validate.ts";
 import { detectAutomation } from "./automation.ts";
+import { connectionOptions } from "./connection-options.ts";
 
 export type ConnectionStatus =
   | "connected"
@@ -80,10 +81,7 @@ export function createConnection(handlers: ConnectionHandlers): Connection {
   const auth: { challengeToken?: string; automation: AutomationReport } = { automation };
 
   const socket = io({
-    // websocket 전용이면 이를 막는 네트워크에서 접속이 아예 불가능하다.
-    transports: ["websocket", "polling"],
-    // 토글을 누르기 전에는 연결하지 않는다.
-    autoConnect: false,
+    ...connectionOptions,
     auth,
   }) as ReturnType<typeof io> & {
     on: <E extends keyof ServerToClientEvents>(
