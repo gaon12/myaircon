@@ -267,7 +267,8 @@ export async function buildApp({
     stats,
     tagger,
     bans,
-    guard,
+    // 일반 방어를 꺼도 관리자 인증 시도 제한에 쓰는 Guard는 유지한다.
+    guard: config.guard.enabled ? guard : undefined,
     challenge,
     onChange: (temp) => store.schedule({ temp }),
   });
