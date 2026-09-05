@@ -16,9 +16,8 @@ type AssetSet = Record<AssetSlot, string>;
 /**
  * 기기 종류별 이미지 경로.
  *
- * 온풍기 전용 에셋은 아직 없다. public/ 아래에 아래 이름으로 파일을 떨어뜨리면
- * 자동으로 그걸 쓰고, 없으면 파일 단위로 에어컨 이미지로 폴백한다. 본체만
- * 먼저 넣고 팬/바람은 에어컨 것을 그대로 쓰는 식도 가능하다.
+ * 온풍기 본체는 heater0.png를 쓴다. 보조 팬·바람을 포함해 누락된 파일은
+ * 에어컨 에셋으로 폴백한다. 본체에 그려진 고정 루버의 중복 표시는 클라이언트가 막는다.
  */
 const ASSET_SETS: Record<DeviceKind, AssetSet> = {
   aircon: { body: "/aircon0.png", fan: "/aircon-fan2.png", air: "/air2.png" },

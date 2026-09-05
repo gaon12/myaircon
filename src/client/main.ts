@@ -111,6 +111,11 @@ function applyDevice(device: DeviceInfo): void {
   els.fan.src = device.assets.fan;
   els.air.src = device.assets.air;
 
+  // 온풍기 본체에는 고정 루버가 그려져 있다. 에어컨용 보조 팬으로 덮지 않는다.
+  const heaterBody = device.kind === "heater" && device.assets.body === "/heater0.png";
+  document.documentElement.classList.toggle("has-heater-body", heaterBody);
+  els.fan.hidden = heaterBody && device.assets.fan === "/aircon-fan2.png";
+
   // 기기 이름이 제목과 안내 문구에 들어가므로 문자열을 다시 그린다.
   renderStrings();
 }

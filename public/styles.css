@@ -208,6 +208,11 @@ main {
   animation: reveal 2s infinite forwards;
 }
 
+/* 온풍기 전용 본체와 함께 쓸 때는 공통 바람 그래픽에 따뜻한 색을 입힌다. */
+:root.has-heater-body .air {
+  filter: sepia(1) saturate(1.6);
+}
+
 @keyframes reveal {
   0% {
     clip-path: inset(0 0 100% 0);

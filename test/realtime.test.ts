@@ -51,9 +51,9 @@ describe("실시간 온도 조절", () => {
       server = await startTestServer({ device: { mode: "heater" } });
       const { init } = await server.connect();
       assert.equal(init.device.kind, "heater");
-      // 온풍기 에셋이 아직 없으므로 에어컨 이미지로 폴백해야 한다
+      // 전용 본체를 서빙하고 보조 팬·바람은 공통 에셋을 사용한다.
       assert.equal(init.device.usingFallback, true);
-      assert.equal(init.device.assets.body, "/aircon0.png");
+      assert.equal(init.device.assets.body, "/heater0.png");
     });
 
     it("에어컨으로 고정하면 폴백이 아니다", async () => {
@@ -69,6 +69,11 @@ describe("실시간 온도 조절", () => {
       for (const url of Object.values(init.device.assets)) {
         const res: LightMyRequestResponse = await server.app.inject({ method: "GET", url });
         assert.equal(res.statusCode, 200, `${url}를 서빙하지 못한다`);
+        assert.deepEqual(
+          res.rawPayload.subarray(0, 8),
+          Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+          `${url}는 실제 PNG여야 한다`,
+        );
       }
     });
 
