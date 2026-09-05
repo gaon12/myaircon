@@ -34,7 +34,7 @@
     "build": "tsc -p tsconfig.server.json && tsc -p tsconfig.client.json",
     "prestart": "npm run build",
     "start": "node dist/server/server.js",
-    "dev": "node --watch src/server/server.ts",
+    "dev": "node scripts/dev.mjs",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "node --test \"test/**/*.test.ts\"",
     "test:watch": "node --test --watch \"test/**/*.test.ts\"",

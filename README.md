@@ -35,11 +35,18 @@ npm install         # prepare 훅이 TypeScript를 빌드한다
 npm start           # http://localhost:8080
 ```
 
-개발 중에는 파일 변경 시 자동 재시작 (빌드 없이 소스를 그대로 실행):
+개발 중에는 클라이언트 초기 빌드 후 클라이언트 컴파일과 서버 재시작을 함께 감시한다:
 
 ```bash
 npm run dev
 ```
+
+클라이언트 또는 공유 TypeScript를 수정하면 `public/js/`를 다시 컴파일한다.
+브라우저를 새로고침하면 변경이 보인다. 서버는 TypeScript 소스를 직접 실행하며
+의존 파일 변경 시 재시작한다. 초기 클라이언트 타입 오류가 있으면 서버를 열지 않고
+실패한다. 감시 중 타입 오류가 있으면 마지막 성공 산출물을 유지한다.
+개발 서버는 기본적으로 `127.0.0.1`에 바인딩하며, 필요한 경우에만 `HOST`를 지정한다.
+Ctrl+C로 두 감시자와 하위 프로세스를 함께 종료한다.
 
 > **오디오는 secure context에서만 동작한다.**
 > `AudioWorklet.addModule()`은 `localhost` 또는 `https`에서만 성공한다.
@@ -51,7 +58,7 @@ npm run dev
 | --- | --- |
 | `npm run build` | TypeScript 컴파일 (`dist/`, `public/js/`) |
 | `npm start` | 서버 실행 (`prestart`가 먼저 빌드한다) |
-| `npm run dev` | 소스를 그대로 실행하며 자동 재시작 |
+| `npm run dev` | 클라이언트 초기 빌드·컴파일 감시 + 서버 소스 재시작 |
 | `npm run typecheck` | 서버/클라이언트/테스트 타입 검사 |
 | `npm test` | 테스트 (Node 내장 러너, 빌드 불필요) |
 | `npm run test:watch` | 테스트 watch 모드 |
@@ -427,7 +434,8 @@ test/             Node 내장 러너 기반 테스트 (*.test.ts)
 
 소스에서는 `./foo.ts`로 import 하고, `rewriteRelativeImportExtensions`가 컴파일
 시 `./foo.js`로 바꿔 내보낸다. 덕분에 **Node 24가 소스를 그대로 실행**할 수 있어
-(타입 스트리핑) 테스트와 `npm run dev`는 빌드가 필요 없다. 배포는 컴파일된
+(타입 스트리핑) 테스트는 빌드가 필요 없다. `npm run dev`는 서버 소스를 직접
+실행하고 브라우저용 클라이언트를 컴파일한다. 배포는 컴파일된
 `dist/`를 쓴다.
 
 `erasableSyntaxOnly`가 `enum`/`namespace`처럼 "지울 수 없는 문법"을 금지해서
