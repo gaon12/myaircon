@@ -398,6 +398,10 @@ src/
     app.ts        진입점. 브라우저 확인만 하고 통과하면 main.ts를 부른다
     dom.ts        필수 요소 조회 (없으면 시작 시점에 던진다)
     socket.ts     서버 연결 생명주기 + 수신 메시지 검증
+    connection-options.ts 같은 출처 WebSocket/polling 연결 옵션
+    nickname-dialog.ts 닉네임 입력·복원·변경
+    verify-dialog.ts 확인 화면과 작업증명 진행
+    stats-dialog.ts 통계 요청 취소·기간 선택·다이얼로그
     audio.ts      브라운 노이즈 재생, 게인 스테이징
     worklet.ts    AudioWorkletProcessor + 순수 DSP
     storage.ts    localStorage 래퍼
@@ -407,7 +411,7 @@ src/
     challenge.ts  작업증명 풀이
     automation.ts 자동화 흔적 탐지 (순수 함수)
     compat.ts     브라우저 기능 확인
-    main.ts       앱 본체 (compat 통과 시 동적 import)
+    main.ts       기기·온도·오디오 상태와 화면 모듈 연결
     i18n/         로케일 등록, Locale 계약
 public/
   index.html      마크업 (인라인 script/style 없음)
