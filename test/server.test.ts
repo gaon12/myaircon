@@ -5,6 +5,7 @@ import { after, before, describe, it } from "node:test";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { type AppContext, buildApp, closeApp } from "../src/server/app.ts";
 import { config as baseConfig } from "../src/server/config.ts";
+import { deviceInfoSchema } from "../src/shared/protocol.ts";
 
 /** 헤더 값은 string | string[] | undefined 다. 단언에 쓰기 좋게 문자열로 만든다. */
 const header = (res: LightMyRequestResponse, name: string): string => String(res.headers[name]);
@@ -48,6 +49,17 @@ describe("HTTP 서버", () => {
     assert.equal(body.min, 18);
     assert.equal(body.max, 30);
     assert.equal(typeof body.uptimeSeconds, "number");
+  });
+
+  it("GET /api/device 가 서버가 정한 기기를 준다", async () => {
+    // 오프라인 모드에서도 화면이 서버와 같은 기기를 쓰려면 소켓 없이 이 값을
+    // 받을 수 있어야 한다. 형태는 소켓으로 내보내는 것과 같아야 한다.
+    const res = await app.inject({ method: "GET", url: "/api/device" });
+    assert.equal(res.statusCode, 200);
+    assert.equal(header(res, "cache-control"), "no-store");
+    const parsed = deviceInfoSchema.parse(res.json(), "body");
+    assert.ok(parsed.ok, parsed.ok ? "" : parsed.error);
+    assert.deepEqual(parsed.value, context.realtime.device);
   });
 
   it("없는 경로는 404", async () => {

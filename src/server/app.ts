@@ -290,6 +290,15 @@ export async function buildApp({
 
   registerAdmin(app, { config, realtime, bans, tagger, guard });
 
+  // 소켓은 온라인 모드를 켤 때만 열린다. 기기 종류는 온라인 여부와 상관없이
+  // 서버가 정하는 값이므로(계절/DEVICE_MODE), 오프라인 화면도 이걸로 맞춘다.
+  app.get("/api/device", async (_req, reply) => {
+    // 계절이 바뀌면 서버가 값을 바꾼다. 캐시에 굳으면 오프라인 화면만
+    // 옛 기기에 머문다.
+    reply.header("Cache-Control", "no-store");
+    return realtime.device;
+  });
+
   // realtime이 기기 종류를 들고 있으므로 그 뒤에 등록한다.
   app.get("/healthz", async () => ({
     status: "ok",
