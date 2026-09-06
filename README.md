@@ -74,6 +74,22 @@ Ctrl+C로 두 감시자와 하위 프로세스를 함께 종료한다.
 [`src/server/config.ts`](src/server/config.ts)에 있다.
 잘못된 값은 부팅 시점에 바로 에러가 난다.
 
+프로젝트 루트에 `.env`를 두면 서버가 부팅할 때 읽는다.
+[`src/server/env.ts`](src/server/env.ts)가 진입점에서 한 번 부르므로
+`npm start`, `npm run dev`, pm2로 `dist/server/server.js`를 직접 띄우는
+경우가 모두 같게 동작한다. 파일이 없어도 정상이고, `.env`는 커밋하지 않는다
+(`.env.example`을 복사해서 쓴다).
+
+셸이나 프로세스 매니저에 이미 있는 값이 `.env`보다 우선한다. 한 번만 다르게
+띄워 보고 싶을 때 쓴다:
+
+```bash
+DEVICE_MODE=heater npm start
+```
+
+설정은 부팅할 때 한 번만 읽는다. `.env`를 고쳤으면 서버를 다시 시작해야 한다
+(`npm run dev`는 소스 변경만 감시하므로 `.env` 수정은 직접 재시작해야 한다).
+
 자주 쓰는 것만:
 
 | 변수 | 기본값 | 설명 |
@@ -185,6 +201,10 @@ pm2 save
 > `pm2 start npm -- start` 로 띄우지 말 것. `start`에는 `prestart` 훅이
 > 걸려 있어서 pm2가 재시작할 때마다 `tsc`가 다시 돈다. 빌드는 배포할 때
 > 한 번만 하면 된다.
+
+`dist/server/server.js`를 직접 띄워도 프로젝트 루트의 `.env`를 읽는다.
+배포 스크립트의 `git clean`은 무시되는 파일을 지우지 않으므로 서버에 둔
+`.env`는 배포해도 남는다. 값을 바꿨다면 `pm2 reload`로 반영한다.
 
 `SIGTERM`/`SIGINT`를 받으면 열린 소켓을 정리하고 마지막 온도를 저장한 뒤 종료한다.
 
