@@ -135,6 +135,11 @@ DEVICE_MODE=heater npm start
 온풍기는 높게 맞출수록, 에어컨은 낮게 맞출수록 세게 돌아간다. 브라운 노이즈의
 음량 방향도 기기에 따라 뒤집힌다.
 
+온라인 모드를 켜지 않아도 기기는 서버가 정한 것을 따른다. 소켓은 온라인 모드에서만
+열리므로, 화면은 시작할 때 `GET /api/device`로 한 번 물어본다(마지막으로 받은 값을
+저장해 두고 먼저 그린다). 온라인 모드는 온도를 남과 같이 쓰느냐의 문제일 뿐이고,
+계절에 맞는 기기까지 사람마다 달라질 이유는 없다.
+
 ### 온풍기 이미지
 
 `public/heater0.png`에 투명 배경의 전용 온풍기 본체가 포함되어 있다.
@@ -286,6 +291,7 @@ ssh-keyscan -p 22 <서버주소>          # 아래 SSH_KNOWN_HOSTS에 넣을 값
 
 ```
 GET /healthz    ->  {"status":"ok","temp":18,"min":18,"max":30,"device":"aircon","uptimeSeconds":42}
+GET /api/device ->  {"kind":"heater","assets":{...},"usingFallback":false} (소켓 없이도 기기를 안다)
 GET /api/stats  ->  {"online":3,"today":[...],"allTime":[...],"recent":[...],"hourly":[...],"at":...}
 GET /api/challenge -> 확인용 작업증명 문제 (점수가 애매할 때 클라이언트가 요청)
 POST /api/verify   -> 답 제출, 소켓 핸드셰이크에 낼 토큰을 받는다
