@@ -1,5 +1,13 @@
-import { buildApp, closeApp } from "./app.ts";
-import { config } from "./config.ts";
+import { loadEnv } from "./env.ts";
+
+// .env를 config보다 먼저 읽어야 한다. config.ts는 import되는 시점에
+// process.env를 읽어 설정 객체를 만들고, app.ts도 그 config를 끌어온다.
+// 정적 import는 이 파일의 본문보다 먼저 평가되는 데다 biome의 import 정렬이
+// 순서를 지켜 주지도 않으므로, 두 모듈은 로드가 끝난 뒤 동적으로 가져온다.
+loadEnv();
+
+const { buildApp, closeApp } = await import("./app.ts");
+const { config } = await import("./config.ts");
 
 const context = await buildApp({ config });
 const { app } = context;
