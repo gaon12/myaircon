@@ -1,10 +1,11 @@
-import type {
-  BlockedMessage,
-  DeviceInfo,
-  DeviceKind,
-  Direction,
-  InitMessage,
-  TempChangeMessage,
+import {
+  type BlockedMessage,
+  type DeviceInfo,
+  type DeviceKind,
+  type Direction,
+  deviceInfoSchema,
+  type InitMessage,
+  type TempChangeMessage,
 } from "../shared/protocol.ts";
 import { BrownNoise, gainForTemperature } from "./audio.ts";
 import { requireElement } from "./dom.ts";
@@ -40,7 +41,7 @@ const els = {
 
 type AppState = {
   locale: LocaleCode;
-  /** 온라인 기기 종류는 서버가 정한다. 초기값은 오프라인 전용이다. */
+  /** 기기 종류는 온라인 여부와 무관하게 서버가 정한다. 아래 값은 응답 전까지의 임시값이다. */
   deviceKind: DeviceKind;
   username: string;
   started: boolean;
@@ -118,6 +119,54 @@ function applyDevice(device: DeviceInfo): void {
 
   // 기기 이름이 제목과 안내 문구에 들어가므로 문자열을 다시 그린다.
   renderStrings();
+
+  // 음량 방향이 기기마다 반대다(에어컨은 낮을수록, 온풍기는 높을수록 세다).
+  // 기기가 바뀌면 지금 나고 있는 소리도 다시 잡아야 한다.
+  audio.setGain(currentGain(state.temp));
+
+  rememberDevice(device);
+}
+
+/**
+ * 서버가 정한 기기를 가져온다.
+ *
+ * 소켓은 온라인 모드를 켤 때만 열리는데, 기기 종류는 온라인 여부와 상관없는
+ * 값이다. 오프라인 모드는 온도를 남과 같이 쓰지 않을 뿐이고, 계절에 맞는
+ * 기기는 접속자 전원에게 같아야 한다. 그래서 시작할 때 한 번 물어본다.
+ */
+async function loadDevice(): Promise<void> {
+  try {
+    const response = await fetch("/api/device", { headers: { accept: "application/json" } });
+    if (!response.ok) return;
+    const parsed = deviceInfoSchema.parse(await response.json(), "device");
+    if (!parsed.ok) {
+      console.warn(`서버가 보낸 기기 정보가 올바르지 않습니다: ${parsed.error}`);
+      return;
+    }
+    applyDevice(parsed.value);
+  } catch {
+    // 서버에 닿지 않는 상태다. 마지막으로 알던 기기로 계속 쓴다.
+  }
+}
+
+/** 다음 방문의 첫 화면부터 맞는 기기가 그려지도록 기억해 둔다. */
+function rememberDevice(device: DeviceInfo): void {
+  writeValue("device", JSON.stringify(device));
+}
+
+/**
+ * 기억해 둔 기기로 먼저 그린다. 저장된 값은 사용자가 고칠 수 있으므로 서버
+ * 메시지와 똑같은 스키마로 검증한다. 곧 도착할 서버 값이 어차피 덮어쓴다.
+ */
+function restoreDevice(): void {
+  const saved = readValue("device");
+  if (saved === null) return;
+  try {
+    const parsed = deviceInfoSchema.parse(JSON.parse(saved), "device");
+    if (parsed.ok) applyDevice(parsed.value);
+  } catch {
+    // JSON이 깨져 있으면 무시한다.
+  }
 }
 
 const fadeTimers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
@@ -188,15 +237,14 @@ const connection = createConnection({
     state.min = min;
     state.max = max;
     state.temp = temp;
+    // 게인은 applyDevice가 기기 방향까지 반영해 다시 잡는다.
     applyDevice(device);
     renderTemperature();
-    audio.setGain(currentGain(temp));
   },
 
   // 서버가 계절이 바뀐 것을 감지하면 접속 중에도 기기가 교체된다.
   onDeviceChange(device: DeviceInfo) {
     applyDevice(device);
-    audio.setGain(currentGain(state.temp));
   },
 
   onTempChange({ temp, changed, username }: TempChangeMessage) {
@@ -446,6 +494,11 @@ for (const button of document.querySelectorAll("[data-close-dialog]")) {
 buildLanguageOptions();
 renderStrings();
 guardTemperatureDisplay();
+
+// 기억해 둔 기기로 먼저 그리고 서버 값으로 확인한다. 온라인 모드를 켜지
+// 않아도 화면은 서버가 정한 기기를 따라야 한다.
+restoreDevice();
+void loadDevice();
 
 // 저장된 이름도 입력과 같은 문자 규칙으로 검증한 뒤 사용한다.
 const remembered = nickname.remembered();
