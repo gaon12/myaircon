@@ -25,9 +25,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           # package.json의 engines가 >=24다. 여기서만 24를 따로 적으면
           # 두 곳이 어긋나므로 파일에서 읽는다.
