@@ -56,10 +56,13 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/myaircon' }}
-          PM2_NAME: ${{ vars.PM2_NAME || 'myaircon' }}
-          HEALTH_URL: ${{ vars.HEALTH_URL || 'http://127.0.0.1:8080/healthz' }}
+          # 아래 넷은 비밀이 아니라 환경 정보라 Variables가 제자리다. 다만
+          # 서버 주소나 포트를 굳이 드러내지 않으려는 경우가 있어 Secrets에
+          # 넣어도 받는다. 둘 다 있으면 Secrets가 이긴다.
+          SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH || '/srv/myaircon' }}
+          PM2_NAME: ${{ secrets.PM2_NAME || vars.PM2_NAME || 'myaircon' }}
+          HEALTH_URL: ${{ secrets.HEALTH_URL || vars.HEALTH_URL || 'http://127.0.0.1:8080/healthz' }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail

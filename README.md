@@ -278,6 +278,11 @@ ssh-keyscan -p 22 <서버주소>          # 아래 SSH_KNOWN_HOSTS에 넣을 값
 | `PM2_NAME` | `myaircon` |
 | `HEALTH_URL` | `http://127.0.0.1:8080/healthz` |
 
+이 넷은 비밀이 아니라 환경 정보라 Variables가 제자리다. 다만 서버 주소나
+포트를 굳이 드러내고 싶지 않을 수 있어 **같은 이름의 Secret으로 넣어도 받는다**
+(둘 다 있으면 Secret이 이긴다). 반대로 `SSH_HOST`·`SSH_USER`·`SSH_KEY`·
+`SSH_KNOWN_HOSTS`는 Secret에서만 읽는다.
+
 > **`SSH_KNOWN_HOSTS`를 비워 두지 말 것.** 흔히 쓰는 방법이 러너에서
 > `ssh-keyscan`을 즉석에서 돌리는 것인데, 그건 처음 만난 키를 무조건 믿는
 > 것이라 중간자에게 그대로 배포해 버릴 수 있다. 그래서 이 워크플로는
